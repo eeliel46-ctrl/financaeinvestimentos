@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,113 +8,162 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 const Auth = () => {
-    const [loading, setLoading] = useState(false);
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [isLogin, setIsLogin] = useState(true);
-    const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
+  const navigate = useNavigate();
 
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
+  useEffect(() => {
+    // Se já estiver logado, redireciona para home
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate("/");
+      }
+    });
+  }, [navigate]);
 
-        try {
-            if (isLogin) {
-                const { error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-                if (error) throw error;
-                navigate("/");
-            } else {
-                console.log("🔵 Tentando cadastrar:", email);
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                });
-                console.log("🔵 Resposta do cadastro:", { data, error });
+  const handleLogin = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-                if (error) throw error;
+      if (error) throw error;
 
-                if (data.user) {
-                    console.log("✅ Usuário criado com sucesso:", data.user.id);
-                    toast.success("Cadastro realizado com sucesso! Faça login para acessar.");
-                    setIsLogin(true);
-                } else {
-                    console.warn("⚠️ Cadastro sem erro mas sem usuário retornado");
-                    toast.warning("Cadastro pode ter sido realizado. Tente fazer login.");
-                    setIsLogin(true);
-                }
-            }
-        } catch (error: any) {
-            console.error("❌ Auth error:", error);
-            let errorMessage = "Erro na autenticação";
-            if (error.message.includes("Invalid login credentials")) {
-                errorMessage = "Email ou senha incorretos.";
-            } else if (error.message.includes("Email not confirmed")) {
-                errorMessage = "Este email precisa ser confirmado.";
-            } else if (error.message.includes("User already registered")) {
-                errorMessage = "Este email já está cadastrado.";
-            }
-            toast.error(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (data.session) {
+        toast.success("Login realizado com sucesso!");
+        navigate("/");
+      }
+    } catch (error: any) {
+      console.error("Erro no login:", error);
+      toast.error(error.message || "Erro ao fazer login. Verifique suas credenciais.");
+    }
+  };
 
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>{isLogin ? "Login" : "Cadastro"}</CardTitle>
-                    <CardDescription>
-                        {isLogin
-                            ? "Entre para acessar suas finanças"
-                            : "Crie sua conta para começar"}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleAuth} className="space-y-4">
-                        <div className="space-y-2">
-                            <Input
-                                type="email"
-                                placeholder="Email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Input
-                                type="password"
-                                placeholder="Senha"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <Button className="w-full" type="submit" disabled={loading}>
-                            {loading ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : null}
-                            {isLogin ? "Entrar" : "Cadastrar"}
-                        </Button>
-                        <div className="text-center text-sm">
-                            <button
-                                type="button"
-                                className="text-primary hover:underline"
-                                onClick={() => setIsLogin(!isLogin)}
-                            >
-                                {isLogin
-                                    ? "Não tem uma conta? Cadastre-se"
-                                    : "Já tem uma conta? Entre"}
-                            </button>
-                        </div>
-                    </form>
-                </CardContent>
-            </Card>
-        </div>
-    );
+  const handleSignUp = async () => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        toast.success("Cadastro realizado! Você já pode fazer login.");
+        setIsLogin(true);
+        setPassword("");
+      }
+    } catch (error: any) {
+      console.error("Erro no cadastro:", error);
+      toast.error(error.message || "Erro ao criar conta.");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email || !password) {
+      toast.error("Preencha email e senha");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("A senha deve ter no mínimo 6 caracteres");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        await handleLogin();
+      } else {
+        await handleSignUp();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-bold">
+            {isLogin ? "Bem-vindo" : "Criar Conta"}
+          </CardTitle>
+          <CardDescription>
+            {isLogin
+              ? "Entre com suas credenciais"
+              : "Preencha os dados para criar sua conta"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Senha</label>
+              <Input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                disabled={loading}
+              />
+            </div>
+            <Button 
+              className="w-full" 
+              type="submit" 
+              disabled={loading}
+              size="lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>{isLogin ? "Entrar" : "Criar Conta"}</>
+              )}
+            </Button>
+            <div className="text-center text-sm pt-2">
+              <button
+                type="button"
+                className="text-primary hover:underline font-medium"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setPassword("");
+                }}
+                disabled={loading}
+              >
+                {isLogin
+                  ? "Não tem conta? Cadastre-se"
+                  : "Já tem conta? Faça login"}
+              </button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 };
 
 export default Auth;

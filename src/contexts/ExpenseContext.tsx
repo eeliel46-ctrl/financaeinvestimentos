@@ -46,13 +46,18 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<Session['user'] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Listen for auth changes FIRST
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) {
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
         loadExpenses(session.user.id);
       } else {
         setExpenses([]);
@@ -60,12 +65,12 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    // THEN check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
         loadExpenses(session.user.id);
       } else {
         setExpenses([]);
