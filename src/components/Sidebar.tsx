@@ -1,3 +1,4 @@
+
 import { useExpenses } from "@/contexts/ExpenseContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,8 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: "chat", label: "Registro Rápido", icon: MessageCircle },
     { id: "budgets", label: "Orçamentos", icon: PieChart },
     { id: "goals", label: "Metas", icon: Target },
-    { id: "analytics", label: "Análises", icon: TrendingUp },
+    { id: "investments", label: "Investimentos", icon: TrendingUp },
+    { id: "analytics", label: "Análises", icon: BarChart3 },
     { id: "settings", label: "Configurações", icon: Settings },
   ];
 
