@@ -85,7 +85,7 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
 
         } catch (error: any) {
             console.error("Error adding investment:", error);
-            toast.error("Erro ao salvar investimento");
+            toast.error(error.message || "Erro ao salvar investimento");
         } finally {
             setLoading(false);
         }
