@@ -337,8 +337,11 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     ) : (
-                                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                                            Histórico não disponível para esta ação
+                                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm p-4 text-center">
+                                            <p>Histórico não disponível para esta ação.</p>
+                                            <p className="text-xs mt-2 opacity-70">
+                                                Verifique se o token da API Brapi está configurado no arquivo .env
+                                            </p>
                                         </div>
                                     )}
                                 </div>
