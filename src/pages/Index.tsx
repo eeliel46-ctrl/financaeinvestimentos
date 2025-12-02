@@ -5,6 +5,7 @@ import { ChatInterface } from "@/components/ChatInterface";
 import { BudgetsInterface } from "@/components/BudgetsInterface";
 import { GoalsInterface } from "@/components/GoalsInterface";
 import { InvestmentsInterface } from "@/components/InvestmentsInterface";
+import { AnalyticsInterface } from "@/components/AnalyticsInterface";
 import { ExpenseProvider } from "@/contexts/ExpenseContext";
 
 const Index = () => {
@@ -23,12 +24,7 @@ const Index = () => {
       case "investments":
         return <InvestmentsInterface />;
       case "analytics":
-        return (
-          <div className="p-6">
-            <h1 className="text-3xl font-bold mb-4">Análises Avançadas</h1>
-            <p className="text-muted-foreground">Funcionalidade em desenvolvimento...</p>
-          </div>
-        );
+        return <AnalyticsInterface />;
       case "settings":
         return (
           <div className="p-6">

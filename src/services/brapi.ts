@@ -6,6 +6,15 @@ export interface StockData {
     regularMarketChangePercent?: number;
 }
 
+export interface HistoricalPrice {
+    date: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
 export interface StockListItem {
     stock: string;
     name: string;
@@ -207,5 +216,40 @@ export const getStocksBatch = async (tickers: string[]): Promise<StockData[]> =>
         } catch {
             return [];
         }
+    }
+};
+
+export const getStockHistory = async (ticker: string, days: number = 30): Promise<HistoricalPrice[]> => {
+    try {
+        const token = getToken();
+        const tokenParam = token ? `&token=${token}` : "";
+        const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?range=${days}d&interval=1d${tokenParam}`);
+
+        if (!response.ok) {
+            console.error("Failed to fetch stock history");
+            return [];
+        }
+
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+            const result = data.results[0];
+            
+            if (result.historicalDataPrice) {
+                return result.historicalDataPrice.map((item: any) => ({
+                    date: new Date(item.date * 1000).toISOString(),
+                    open: item.open,
+                    high: item.high,
+                    low: item.low,
+                    close: item.close,
+                    volume: item.volume
+                }));
+            }
+        }
+
+        return [];
+    } catch (error) {
+        console.error("Error fetching stock history:", error);
+        return [];
     }
 };
