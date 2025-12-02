@@ -3,11 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Loader2 } from "lucide-react";
-import { searchStock, searchStockFromList, StockData, StockListItem } from "@/services/brapi";
+import { Search, Loader2, TrendingUp } from "lucide-react";
+import { searchStock, searchStockFromList, getStockHistory, StockData, StockListItem, HistoricalPrice } from "@/services/brapi";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface AddInvestmentDialogProps {
     open: boolean;
@@ -25,6 +27,9 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
     const [stockData, setStockData] = useState<StockData | null>(null);
     const [suggestions, setSuggestions] = useState<StockListItem[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [historicalData, setHistoricalData] = useState<HistoricalPrice[]>([]);
+    const [timeRange, setTimeRange] = useState("30d");
+    const [loadingHistory, setLoadingHistory] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -56,11 +61,33 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
         return () => clearTimeout(debounce);
     }, [ticker]);
 
+    useEffect(() => {
+        const fetchHistory = async () => {
+            if (!stockData) return;
+
+            setLoadingHistory(true);
+            try {
+                const days = parseInt(timeRange.replace('d', '')) || 30;
+                // Map '1y' to 365 days
+                const range = timeRange === '1y' ? 365 : days;
+
+                const history = await getStockHistory(stockData.symbol, range);
+                setHistoricalData(history);
+            } catch (error) {
+                console.error("Error fetching history:", error);
+            } finally {
+                setLoadingHistory(false);
+            }
+        };
+
+        fetchHistory();
+    }, [stockData, timeRange]);
+
     const handleSelectSuggestion = async (stock: StockListItem) => {
         setTicker(stock.stock);
         setShowSuggestions(false);
         setSuggestions([]);
-        
+
         // Set stock data from the list
         setStockData({
             symbol: stock.stock,
@@ -181,9 +208,9 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                     {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                                 </Button>
                             </div>
-                            
+
                             {showSuggestions && suggestions.length > 0 && (
-                                <div 
+                                <div
                                     ref={suggestionsRef}
                                     className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg"
                                 >
@@ -196,9 +223,9 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                                 onClick={() => handleSelectSuggestion(stock)}
                                             >
                                                 {stock.logo && (
-                                                    <img 
-                                                        src={stock.logo} 
-                                                        alt={stock.stock} 
+                                                    <img
+                                                        src={stock.logo}
+                                                        alt={stock.stock}
                                                         className="w-6 h-6 rounded"
                                                         onError={(e) => (e.currentTarget.style.display = 'none')}
                                                     />
@@ -222,21 +249,99 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                     </div>
 
                     {stockData && (
-                        <div className="p-3 bg-muted rounded-lg flex items-center gap-3">
-                            {stockData.logourl && (
-                                <img 
-                                    src={stockData.logourl} 
-                                    alt={stockData.symbol} 
-                                    className="w-10 h-10 rounded"
-                                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                                />
-                            )}
-                            <div className="flex-1">
-                                <p className="font-bold">{stockData.symbol}</p>
-                                <p className="text-sm text-muted-foreground truncate max-w-[200px]">{stockData.longName}</p>
-                                <p className="text-sm font-medium text-primary">
-                                    Preço Atual: R$ {stockData.regularMarketPrice?.toFixed(2) || '0.00'}
-                                </p>
+                        <div className="space-y-4">
+                            <div className="p-3 bg-muted rounded-lg flex items-center gap-3">
+                                {stockData.logourl && (
+                                    <img
+                                        src={stockData.logourl}
+                                        alt={stockData.symbol}
+                                        className="w-10 h-10 rounded"
+                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                    />
+                                )}
+                                <div className="flex-1">
+                                    <p className="font-bold">{stockData.symbol}</p>
+                                    <p className="text-sm text-muted-foreground truncate max-w-[200px]">{stockData.longName}</p>
+                                    <p className="text-sm font-medium text-primary">
+                                        Preço Atual: R$ {stockData.regularMarketPrice?.toFixed(2) || '0.00'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Historical Price Chart */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs text-muted-foreground">Histórico de Preços</Label>
+                                    <Tabs value={timeRange} onValueChange={setTimeRange} className="w-auto">
+                                        <TabsList className="h-6 p-0 bg-transparent">
+                                            {['1d', '5d', '30d', '60d', '1y'].map((range) => (
+                                                <TabsTrigger
+                                                    key={range}
+                                                    value={range}
+                                                    className="h-6 px-2 text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-sm"
+                                                >
+                                                    {range.toUpperCase()}
+                                                </TabsTrigger>
+                                            ))}
+                                        </TabsList>
+                                    </Tabs>
+                                </div>
+
+                                <div className="h-[200px] w-full border rounded-md p-2 bg-card">
+                                    {loadingHistory ? (
+                                        <div className="h-full flex items-center justify-center">
+                                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                        </div>
+                                    ) : historicalData.length > 0 ? (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={historicalData}>
+                                                <defs>
+                                                    <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                                <XAxis
+                                                    dataKey="date"
+                                                    tickFormatter={(date) => {
+                                                        const d = new Date(date);
+                                                        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                                                    }}
+                                                    tick={{ fontSize: 10 }}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    minTickGap={30}
+                                                />
+                                                <YAxis
+                                                    domain={['auto', 'auto']}
+                                                    tick={{ fontSize: 10 }}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    tickFormatter={(val) => `R$${val.toFixed(0)}`}
+                                                    width={40}
+                                                />
+                                                <Tooltip
+                                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                                    labelFormatter={(date) => new Date(date).toLocaleDateString('pt-BR')}
+                                                    formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Preço']}
+                                                />
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="close"
+                                                    stroke="#10b981"
+                                                    strokeWidth={2}
+                                                    fillOpacity={1}
+                                                    fill="url(#colorPrice)"
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                                            Histórico não disponível para esta ação
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
