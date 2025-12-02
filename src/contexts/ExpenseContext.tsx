@@ -23,6 +23,7 @@ interface ExpenseContextType {
   getTotalIncome: () => number;
   getBalance: () => number;
   getExpensesByCategory: () => Record<string, number>;
+  getCurrentMonthExpensesByCategory: () => Record<string, number>;
   getIncomeByCategory: () => Record<string, number>;
   getRecentExpenses: (limit?: number) => Expense[];
   selectedDate: Date;
@@ -56,7 +57,7 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         loadExpenses(session.user.id);
       } else {
@@ -69,7 +70,7 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         loadExpenses(session.user.id);
       } else {
@@ -254,6 +255,25 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
       }, {} as Record<string, number>);
   };
 
+  // Always returns current month expenses (for Budget interface)
+  const getCurrentMonthExpensesByCategory = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return expenses
+      .filter(expense => {
+        const expenseDate = new Date(expense.date);
+        return expense.type === 'despesa' &&
+          expenseDate.getMonth() === currentMonth &&
+          expenseDate.getFullYear() === currentYear;
+      })
+      .reduce((acc, expense) => {
+        acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+        return acc;
+      }, {} as Record<string, number>);
+  };
+
   const getIncomeByCategory = () => {
     const currentMonth = selectedDate.getMonth();
     const currentYear = selectedDate.getFullYear();
@@ -287,6 +307,7 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
       getTotalIncome,
       getBalance,
       getExpensesByCategory,
+      getCurrentMonthExpensesByCategory,
       getIncomeByCategory,
       getRecentExpenses,
       selectedDate,

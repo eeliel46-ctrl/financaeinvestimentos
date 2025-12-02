@@ -13,12 +13,12 @@ interface Budget {
 }
 
 export const BudgetsInterface = () => {
-    const { getExpensesByCategory } = useExpenses();
+    const { getCurrentMonthExpensesByCategory } = useExpenses();
     const [budgets, setBudgets] = useState<Budget[]>([]);
     const [newCategory, setNewCategory] = useState("");
     const [newLimit, setNewLimit] = useState("");
 
-    const expensesByCategory = getExpensesByCategory();
+    const expensesByCategory = getCurrentMonthExpensesByCategory();
 
     // Load budgets from localStorage on mount
     useEffect(() => {
