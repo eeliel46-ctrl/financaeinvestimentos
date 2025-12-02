@@ -1,13 +1,13 @@
-
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Search, Loader2 } from "lucide-react";
-import { searchStock, StockData } from "@/services/brapi";
+import { searchStock, searchStockFromList, StockData, StockListItem } from "@/services/brapi";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface AddInvestmentDialogProps {
     open: boolean;
@@ -23,18 +23,67 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
     const [loading, setLoading] = useState(false);
     const [searching, setSearching] = useState(false);
     const [stockData, setStockData] = useState<StockData | null>(null);
+    const [suggestions, setSuggestions] = useState<StockListItem[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node) &&
+                inputRef.current && !inputRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        const searchSuggestions = async () => {
+            if (ticker.length >= 2) {
+                const results = await searchStockFromList(ticker);
+                setSuggestions(results);
+                setShowSuggestions(results.length > 0);
+            } else {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        };
+
+        const debounce = setTimeout(searchSuggestions, 300);
+        return () => clearTimeout(debounce);
+    }, [ticker]);
+
+    const handleSelectSuggestion = async (stock: StockListItem) => {
+        setTicker(stock.stock);
+        setShowSuggestions(false);
+        setSuggestions([]);
+        
+        // Set stock data from the list
+        setStockData({
+            symbol: stock.stock,
+            longName: stock.name,
+            regularMarketPrice: stock.close,
+            logourl: stock.logo,
+            regularMarketChangePercent: stock.change
+        });
+        setPrice(stock.close.toString());
+    };
 
     const handleSearch = async () => {
         if (!ticker) return;
 
         setSearching(true);
+        setShowSuggestions(false);
         try {
             const data = await searchStock(ticker);
             if (data) {
                 setStockData(data);
                 setPrice(data.regularMarketPrice.toString());
             } else {
-                toast.error("Ação não encontrada");
+                toast.error("Ação não encontrada. Tente digitar o código completo (ex: PETR4)");
                 setStockData(null);
             }
         } catch (error) {
@@ -91,8 +140,21 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
         }
     };
 
+    const handleOpenChange = (isOpen: boolean) => {
+        if (!isOpen) {
+            // Reset form when closing
+            setTicker("");
+            setQuantity("");
+            setPrice("");
+            setStockData(null);
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+        onOpenChange(isOpen);
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>Adicionar Investimento</DialogTitle>
@@ -101,28 +163,80 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="ticker">Código da Ação (Ticker)</Label>
-                        <div className="flex gap-2">
-                            <Input
-                                id="ticker"
-                                value={ticker}
-                                onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                                placeholder="Ex: PETR4"
-                            />
-                            <Button type="button" size="icon" onClick={handleSearch} disabled={searching}>
-                                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                            </Button>
+                        <div className="relative">
+                            <div className="flex gap-2">
+                                <Input
+                                    ref={inputRef}
+                                    id="ticker"
+                                    value={ticker}
+                                    onChange={(e) => {
+                                        setTicker(e.target.value.toUpperCase());
+                                        setStockData(null);
+                                    }}
+                                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                                    placeholder="Digite o código (ex: PETR4, VALE3)"
+                                    autoComplete="off"
+                                />
+                                <Button type="button" size="icon" onClick={handleSearch} disabled={searching}>
+                                    {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                </Button>
+                            </div>
+                            
+                            {showSuggestions && suggestions.length > 0 && (
+                                <div 
+                                    ref={suggestionsRef}
+                                    className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg"
+                                >
+                                    <ScrollArea className="max-h-[200px]">
+                                        {suggestions.map((stock) => (
+                                            <button
+                                                key={stock.stock}
+                                                type="button"
+                                                className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-3 transition-colors"
+                                                onClick={() => handleSelectSuggestion(stock)}
+                                            >
+                                                {stock.logo && (
+                                                    <img 
+                                                        src={stock.logo} 
+                                                        alt={stock.stock} 
+                                                        className="w-6 h-6 rounded"
+                                                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                    />
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-sm">{stock.stock}</p>
+                                                    <p className="text-xs text-muted-foreground truncate">{stock.name}</p>
+                                                </div>
+                                                <span className="text-sm font-medium text-primary">
+                                                    R$ {stock.close?.toFixed(2) || '0.00'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </ScrollArea>
+                                </div>
+                            )}
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            Digite pelo menos 2 caracteres para ver sugestões
+                        </p>
                     </div>
 
                     {stockData && (
                         <div className="p-3 bg-muted rounded-lg flex items-center gap-3">
                             {stockData.logourl && (
-                                <img src={stockData.logourl} alt={stockData.symbol} className="w-10 h-10 rounded" />
+                                <img 
+                                    src={stockData.logourl} 
+                                    alt={stockData.symbol} 
+                                    className="w-10 h-10 rounded"
+                                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                                />
                             )}
-                            <div>
+                            <div className="flex-1">
                                 <p className="font-bold">{stockData.symbol}</p>
                                 <p className="text-sm text-muted-foreground truncate max-w-[200px]">{stockData.longName}</p>
-                                <p className="text-sm font-medium">Preço Atual: R$ {stockData.regularMarketPrice}</p>
+                                <p className="text-sm font-medium text-primary">
+                                    Preço Atual: R$ {stockData.regularMarketPrice?.toFixed(2) || '0.00'}
+                                </p>
                             </div>
                         </div>
                     )}
