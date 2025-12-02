@@ -23,7 +23,9 @@ export const supabase = hasEnv
         getUser: async () => ({ data: { user: null } }),
         getSession: async () => ({ data: { session: null } }),
         onAuthStateChange: (_cb: any) => ({ data: { subscription: { unsubscribe: () => {} } } }),
-        signOut: async () => ({ error: null })
+        signOut: async () => ({ error: null }),
+        signInWithPassword: async (_opts: any) => ({ data: { session: null }, error: { message: "Supabase não configurado (VITE_SUPABASE_URL/PUBLISHABLE_KEY)" } }),
+        signUp: async (_opts: any) => ({ data: { user: null }, error: { message: "Supabase não configurado (VITE_SUPABASE_URL/PUBLISHABLE_KEY)" } })
       },
       from: () => ({
         select: async () => ({ data: [], error: null }),
