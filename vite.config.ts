@@ -8,6 +8,14 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/brapi": {
+        target: "https://brapi.dev/api",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/brapi/, ""),
+      },
+    },
   },
   plugins: [
     react(),

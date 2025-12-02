@@ -6,11 +6,12 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Search, Loader2, Bell, BellOff, TrendingUp, TrendingDown, Trash2 } from "lucide-react";
+import { Search, Loader2, Bell, BellOff, TrendingUp, TrendingDown, Trash2, RefreshCcw } from "lucide-react";
 import { searchStock, searchStockFromList, getStockHistory, StockData, StockListItem, HistoricalPrice } from "@/services/brapi";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface StockAlert {
   id: string;
@@ -33,6 +34,7 @@ export const AnalyticsInterface = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
+  const [selectedRange, setSelectedRange] = useState<'1d'|'5d'|'30d'|'60d'|'1y'>('30d');
   
   // Alert form state
   const [targetPrice, setTargetPrice] = useState("");
@@ -74,6 +76,12 @@ export const AnalyticsInterface = () => {
     const debounce = setTimeout(searchSuggestions, 300);
     return () => clearTimeout(debounce);
   }, [ticker, stockData]);
+
+  useEffect(() => {
+    if (stockData) {
+      fetchHistoricalData(stockData.symbol);
+    }
+  }, [selectedRange]);
 
   const fetchAlerts = async () => {
     setLoadingAlerts(true);
@@ -117,7 +125,76 @@ export const AnalyticsInterface = () => {
   const fetchHistoricalData = async (symbol: string) => {
     setLoadingHistory(true);
     try {
-      const history = await getStockHistory(symbol, 90); // 90 days
+      const attempts: Array<{ r: '1d'|'2d'|'5d'|'7d'|'1mo'|'3mo'|'6mo'|'1y'|'2y'|'5y'|'10y'|'ytd'|'max'|'30d'|'60d'; i?: '15m'|'30m'|'1d' }> = [];
+      if (selectedRange === '1d') {
+        attempts.push(
+          { r: '1d', i: '15m' },
+          { r: '1d', i: '30m' },
+          { r: '2d', i: '1d' },
+          { r: '5d', i: '1d' },
+          { r: '7d', i: '1d' },
+          { r: '1mo', i: '1d' },
+          { r: '3mo', i: '1d' },
+          { r: '6mo', i: '1d' },
+          { r: '1y', i: '1d' },
+          { r: '2y', i: '1d' },
+          { r: '5y', i: '1d' },
+          { r: '10y', i: '1d' },
+          { r: 'ytd', i: '1d' },
+          { r: 'max', i: '1d' }
+        );
+      } else if (selectedRange === '30d') {
+        attempts.push(
+          { r: '30d', i: '1d' },
+          { r: '60d', i: '1d' },
+          { r: '1mo', i: '1d' },
+          { r: '3mo', i: '1d' },
+          { r: '6mo', i: '1d' },
+          { r: '1y', i: '1d' },
+          { r: 'ytd', i: '1d' },
+          { r: 'max', i: '1d' },
+          { r: '5d', i: '1d' },
+          { r: '1d', i: '30m' }
+        );
+      } else if (selectedRange === '60d') {
+        attempts.push(
+          { r: '60d', i: '1d' },
+          { r: '30d', i: '1d' },
+          { r: '3mo', i: '1d' },
+          { r: '6mo', i: '1d' },
+          { r: '1y', i: '1d' },
+          { r: 'ytd', i: '1d' },
+          { r: 'max', i: '1d' },
+          { r: '5d', i: '1d' }
+        );
+      } else if (selectedRange === '5d') {
+        attempts.push(
+          { r: '5d', i: '1d' },
+          { r: '7d', i: '1d' },
+          { r: '1mo', i: '1d' },
+          { r: '3mo', i: '1d' },
+          { r: '6mo', i: '1d' },
+          { r: '1y', i: '1d' }
+        );
+      } else {
+        attempts.push(
+          { r: '1y', i: '1d' },
+          { r: '6mo', i: '1d' },
+          { r: '3mo', i: '1d' },
+          { r: '1mo', i: '1d' },
+          { r: '60d', i: '1d' },
+          { r: '30d', i: '1d' },
+          { r: '5d', i: '1d' },
+          { r: '1d', i: '30m' }
+        );
+      }
+
+      let history: HistoricalPrice[] = [];
+      for (const a of attempts) {
+        history = await getStockHistory(symbol, a.r, a.i);
+        if (history.length > 1) break;
+      }
+
       setHistoricalData(history);
     } catch (error) {
       console.error("Error fetching historical data:", error);
@@ -144,6 +221,20 @@ export const AnalyticsInterface = () => {
       }
     } catch (error) {
       toast.error("Erro ao buscar ação");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!stockData) return;
+    setSearching(true);
+    try {
+      const data = await searchStock(stockData.symbol);
+      if (data) {
+        setStockData(data);
+      }
+      await fetchHistoricalData(stockData.symbol);
     } finally {
       setSearching(false);
     }
@@ -212,14 +303,19 @@ export const AnalyticsInterface = () => {
   };
 
   const chartData = historicalData.map(item => ({
-    date: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+    date:
+      selectedRange === '1d'
+        ? new Date(item.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+        : new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
     price: item.close,
     high: item.high,
     low: item.low,
   }));
 
   const priceChange = historicalData.length > 1 
-    ? ((historicalData[historicalData.length - 1].close - historicalData[0].close) / historicalData[0].close) * 100 
+    ? (selectedRange === '1d' && stockData?.regularMarketPreviousClose
+        ? ((historicalData[historicalData.length - 1].close - (stockData.regularMarketPreviousClose || historicalData[0].close)) / (stockData.regularMarketPreviousClose || historicalData[0].close)) * 100
+        : ((historicalData[historicalData.length - 1].close - historicalData[0].close) / historicalData[0].close) * 100)
     : 0;
 
   return (
@@ -350,17 +446,35 @@ export const AnalyticsInterface = () => {
               ) : historicalData.length > 0 ? (
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <span className="text-sm text-muted-foreground">Variação 90 dias:</span>
+                    <span className="text-sm text-muted-foreground">Variação {selectedRange.toUpperCase()}:</span>
                     <Badge variant={priceChange >= 0 ? "default" : "destructive"}>
                       {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
                     </Badge>
                   </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Tabs value={selectedRange} onValueChange={(v) => setSelectedRange(v as any)}>
+                      <TabsList className="h-7 p-0 bg-transparent">
+                        {['1d', '5d', '30d', '60d', '1y'].map((range) => (
+                          <TabsTrigger key={range} value={range} className="h-7 px-2 text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-sm">
+                            {range.toUpperCase()}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
+                    <Button variant="outline" size="sm" onClick={handleRefresh} disabled={searching}>
+                      <RefreshCcw className="mr-2 h-4 w-4" /> Atualizar
+                    </Button>
+                  </div>
                   <ResponsiveContainer width="100%" height={300}>
                     <AreaChart data={chartData}>
                       <defs>
-                        <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="colorGain" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
                           <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -387,17 +501,18 @@ export const AnalyticsInterface = () => {
                       <Area 
                         type="monotone" 
                         dataKey="price" 
-                        stroke="hsl(var(--primary))" 
+                        stroke={priceChange >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
                         fillOpacity={1} 
-                        fill="url(#colorPrice)" 
+                        fill={priceChange >= 0 ? "url(#colorGain)" : "url(#colorLoss)"}
                         strokeWidth={2}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                  Histórico não disponível para esta ação
+                <div className="h-[300px] flex flex-col items-center justify-center text-muted-foreground text-sm p-4 text-center">
+                  <p>Histórico não disponível para esta ação.</p>
+                  <p className="text-xs mt-2 opacity-70">Verifique se o token da API Brapi está configurado no arquivo .env</p>
                 </div>
               )}
             </CardContent>

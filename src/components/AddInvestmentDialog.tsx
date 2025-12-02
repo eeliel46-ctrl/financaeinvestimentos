@@ -67,11 +67,33 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
 
             setLoadingHistory(true);
             try {
-                const days = parseInt(timeRange.replace('d', '')) || 30;
-                // Map '1y' to 365 days
-                const range = timeRange === '1y' ? 365 : days;
-
-                const history = await getStockHistory(stockData.symbol, range);
+                let history: HistoricalPrice[] = [];
+                if (timeRange === '1d') {
+                    history = await getStockHistory(stockData.symbol, '1d', '15m');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1d', '30m');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '5d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '3mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '6mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1y', '1d');
+                } else if (timeRange === '5d') {
+                    history = await getStockHistory(stockData.symbol, '5d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '7d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1mo', '1d');
+                } else if (timeRange === '60d') {
+                    history = await getStockHistory(stockData.symbol, '60d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '3mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '6mo', '1d');
+                } else if (timeRange === '1y') {
+                    history = await getStockHistory(stockData.symbol, '1y', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '6mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '3mo', '1d');
+                } else {
+                    history = await getStockHistory(stockData.symbol, '30d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '60d', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1mo', '1d');
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '3mo', '1d');
+                }
                 setHistoricalData(history);
             } catch (error) {
                 console.error("Error fetching history:", error);
