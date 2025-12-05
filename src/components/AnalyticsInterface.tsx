@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Search, Loader2, Bell, BellOff, TrendingUp, TrendingDown, Trash2, RefreshCcw } from "lucide-react";
+import { Search, Loader2, Bell, BellOff, TrendingUp, TrendingDown, Trash2, RefreshCcw, Bot, Send } from "lucide-react";
+import { getStockChatResponse } from "@/services/groq";
 import { searchStock, searchStockFromList, getStockHistory, StockData, StockListItem, HistoricalPrice } from "@/services/brapi";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,13 +35,49 @@ export const AnalyticsInterface = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [loadingAlerts, setLoadingAlerts] = useState(false);
-  const [selectedRange, setSelectedRange] = useState<'1d'|'5d'|'30d'|'60d'|'1y'>('30d');
-  
+  const [selectedRange, setSelectedRange] = useState<'1d' | '5d' | '30d' | '60d' | '1y'>('30d');
+
   // Alert form state
   const [targetPrice, setTargetPrice] = useState("");
   const [notifyEmail, setNotifyEmail] = useState(true);
   const [notifySystem, setNotifySystem] = useState(true);
   const [savingAlert, setSavingAlert] = useState(false);
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || !stockData) return;
+
+    const userMessage = chatInput;
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setChatLoading(true);
+
+    try {
+      const response = await getStockChatResponse(
+        stockData.symbol,
+        userMessage,
+        {
+          price: stockData.regularMarketPrice,
+          change: stockData.regularMarketChangePercent
+        }
+      );
+
+      setChatMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    } catch (error) {
+      toast.error("Erro ao processar mensagem");
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  // Clear chat when stock changes
+  useEffect(() => {
+    setChatMessages([]);
+  }, [stockData?.symbol]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -52,7 +89,7 @@ export const AnalyticsInterface = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node) &&
-          inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        inputRef.current && !inputRef.current.contains(event.target as Node)) {
         setShowSuggestions(false);
       }
     };
@@ -109,7 +146,7 @@ export const AnalyticsInterface = () => {
     setTicker(stock.stock);
     setShowSuggestions(false);
     setSuggestions([]);
-    
+
     setStockData({
       symbol: stock.stock,
       longName: stock.name,
@@ -125,7 +162,7 @@ export const AnalyticsInterface = () => {
   const fetchHistoricalData = async (symbol: string) => {
     setLoadingHistory(true);
     try {
-      const attempts: Array<{ r: '1d'|'2d'|'5d'|'7d'|'1mo'|'3mo'|'6mo'|'1y'|'2y'|'5y'|'10y'|'ytd'|'max'|'30d'|'60d'; i?: '15m'|'30m'|'1d' }> = [];
+      const attempts: Array<{ r: '1d' | '2d' | '5d' | '7d' | '1mo' | '3mo' | '6mo' | '1y' | '2y' | '5y' | '10y' | 'ytd' | 'max' | '30d' | '60d'; i?: '15m' | '30m' | '1d' }> = [];
       if (selectedRange === '1d') {
         attempts.push(
           { r: '1d', i: '15m' },
@@ -312,10 +349,10 @@ export const AnalyticsInterface = () => {
     low: item.low,
   }));
 
-  const priceChange = historicalData.length > 1 
+  const priceChange = historicalData.length > 1
     ? (selectedRange === '1d' && stockData?.regularMarketPreviousClose
-        ? ((historicalData[historicalData.length - 1].close - (stockData.regularMarketPreviousClose || historicalData[0].close)) / (stockData.regularMarketPreviousClose || historicalData[0].close)) * 100
-        : ((historicalData[historicalData.length - 1].close - historicalData[0].close) / historicalData[0].close) * 100)
+      ? ((historicalData[historicalData.length - 1].close - (stockData.regularMarketPreviousClose || historicalData[0].close)) / (stockData.regularMarketPreviousClose || historicalData[0].close)) * 100
+      : ((historicalData[historicalData.length - 1].close - historicalData[0].close) / historicalData[0].close) * 100)
     : 0;
 
   return (
@@ -362,9 +399,9 @@ export const AnalyticsInterface = () => {
                 </Button>
               )}
             </div>
-            
+
             {showSuggestions && suggestions.length > 0 && (
-              <div 
+              <div
                 ref={suggestionsRef}
                 className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg"
               >
@@ -377,9 +414,9 @@ export const AnalyticsInterface = () => {
                       onClick={() => handleSelectSuggestion(stock)}
                     >
                       {stock.logo && (
-                        <img 
-                          src={stock.logo} 
-                          alt={stock.stock} 
+                        <img
+                          src={stock.logo}
+                          alt={stock.stock}
                           className="w-6 h-6 rounded"
                           onError={(e) => (e.currentTarget.style.display = 'none')}
                         />
@@ -411,9 +448,9 @@ export const AnalyticsInterface = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   {stockData.logourl && (
-                    <img 
-                      src={stockData.logourl} 
-                      alt={stockData.symbol} 
+                    <img
+                      src={stockData.logourl}
+                      alt={stockData.symbol}
                       className="w-12 h-12 rounded-lg"
                       onError={(e) => (e.currentTarget.style.display = 'none')}
                     />
@@ -469,40 +506,40 @@ export const AnalyticsInterface = () => {
                     <AreaChart data={chartData}>
                       <defs>
                         <linearGradient id="colorGain" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tick={{ fontSize: 12 }}
                         className="text-muted-foreground"
                       />
-                      <YAxis 
+                      <YAxis
                         domain={['auto', 'auto']}
                         tick={{ fontSize: 12 }}
                         tickFormatter={(value) => `R$${value.toFixed(0)}`}
                         className="text-muted-foreground"
                       />
-                      <Tooltip 
+                      <Tooltip
                         formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Preço']}
                         labelFormatter={(label) => `Data: ${label}`}
-                        contentStyle={{ 
-                          backgroundColor: 'hsl(var(--card))', 
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
                           border: '1px solid hsl(var(--border))',
                           borderRadius: '8px'
                         }}
                       />
-                      <Area 
-                        type="monotone" 
-                        dataKey="price" 
+                      <Area
+                        type="monotone"
+                        dataKey="price"
                         stroke={priceChange >= 0 ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
-                        fillOpacity={1} 
+                        fillOpacity={1}
                         fill={priceChange >= 0 ? "url(#colorGain)" : "url(#colorLoss)"}
                         strokeWidth={2}
                       />
@@ -541,7 +578,7 @@ export const AnalyticsInterface = () => {
                     Preço atual: R$ {stockData.regularMarketPrice?.toFixed(2)}
                   </p>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2">
                     <Switch
@@ -571,6 +608,68 @@ export const AnalyticsInterface = () => {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* AI Chat Section */}
+      {stockData && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              Assistente IA - {stockData.symbol}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <ScrollArea className="h-[300px] w-full rounded-md border p-4">
+                {chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-center">
+                    <Bot className="h-12 w-12 mb-2 opacity-20" />
+                    <p>Olá! Sou seu assistente financeiro.</p>
+                    <p className="text-sm">Pergunte-me sobre {stockData.symbol}, tendências ou fundamentos.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {chatMessages.map((msg, index) => (
+                      <div
+                        key={index}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted'
+                            }`}
+                        >
+                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {chatLoading && (
+                      <div className="flex justify-start">
+                        <div className="bg-muted rounded-lg p-3">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </ScrollArea>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Digite sua pergunta..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                  disabled={chatLoading}
+                />
+                <Button onClick={handleSendMessage} disabled={chatLoading || !chatInput.trim()}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Active Alerts */}
@@ -618,8 +717,8 @@ export const AnalyticsInterface = () => {
                         </Badge>
                       )}
                     </div>
-                    <Button 
-                      variant="ghost" 
+                    <Button
+                      variant="ghost"
                       size="icon"
                       onClick={() => handleDeleteAlert(alert.id)}
                       className="text-destructive hover:text-destructive"

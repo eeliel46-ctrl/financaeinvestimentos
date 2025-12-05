@@ -140,10 +140,17 @@ export const ExpenseProvider = ({ children }: { children: ReactNode }) => {
         setExpenses(prev => [newExpense, ...prev]);
         const message = expense.type === 'receita' ? 'Receita registrada com sucesso!' : 'Despesa registrada com sucesso!';
         toast.success(message);
+
+        // Força reload após salvar para garantir sincronização com Dashboard e Orçamento
+        setTimeout(async () => {
+          if (session?.user) {
+            await loadExpenses(session.user.id);
+          }
+        }, 500);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding expense:', error);
-      toast.error('Erro ao registrar');
+      toast.error(`Erro ao registrar: ${error.message || error.details || 'Erro desconhecido'}`);
     }
   };
 

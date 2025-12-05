@@ -99,7 +99,7 @@ export const searchStockFromList = async (query: string): Promise<StockListItem[
     return stocks.filter(stock =>
         stock.stock.toUpperCase().includes(upperQuery) ||
         (stock.name && stock.name.toUpperCase().includes(upperQuery))
-    ).slice(0, 10); // Limit to 10 results
+    ).slice(0, 50); // Limit to 50 results
 };
 
 export const searchStock = async (ticker: string): Promise<StockData | null> => {
@@ -246,12 +246,12 @@ export const getStocksBatch = async (tickers: string[]): Promise<StockData[]> =>
 };
 
 type HistoryRange =
-  | '1d' | '2d' | '5d' | '7d'
-  | '1mo' | '3mo' | '6mo'
-  | '1y' | '2y' | '5y' | '10y'
-  | 'ytd' | 'max'
-  | '30d' | '60d'
-  | number
+    | '1d' | '2d' | '5d' | '7d'
+    | '1mo' | '3mo' | '6mo'
+    | '1y' | '2y' | '5y' | '10y'
+    | 'ytd' | 'max'
+    | '30d' | '60d'
+    | number
 
 export const getStockHistory = async (ticker: string, range: HistoryRange = 30, interval?: '5m' | '15m' | '30m' | '1d'): Promise<HistoricalPrice[]> => {
     try {

@@ -3,8 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Loader2, TrendingUp } from "lucide-react";
+import { Search, Loader2, TrendingUp, Bot, ChevronDown, ChevronUp } from "lucide-react";
 import { searchStock, searchStockFromList, getStockHistory, StockData, StockListItem, HistoricalPrice } from "@/services/brapi";
+import { getMarketAnalysis, AIAnalysisResult } from "@/services/groq";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,6 +31,12 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
     const [historicalData, setHistoricalData] = useState<HistoricalPrice[]>([]);
     const [timeRange, setTimeRange] = useState("30d");
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // AI Analysis State
+    const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
+    const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+    const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+
     const inputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +110,39 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
         };
 
         fetchHistory();
+        fetchHistory();
     }, [stockData, timeRange]);
+
+    // Fetch AI Analysis when stock data and history are available
+    useEffect(() => {
+        const fetchAnalysis = async () => {
+            if (stockData && historicalData.length > 0 && !aiAnalysis) {
+                setLoadingAnalysis(true);
+                try {
+                    const result = await getMarketAnalysis(
+                        stockData.symbol,
+                        stockData.regularMarketPrice,
+                        historicalData
+                    );
+                    setAiAnalysis(result);
+                    setIsAnalysisOpen(true);
+                } catch (error) {
+                    console.error("Error fetching AI analysis:", error);
+                } finally {
+                    setLoadingAnalysis(false);
+                }
+            }
+        };
+
+        const debounce = setTimeout(fetchAnalysis, 1000); // Debounce to avoid too many requests
+        return () => clearTimeout(debounce);
+    }, [stockData, historicalData]);
+
+    // Reset analysis when stock changes
+    useEffect(() => {
+        setAiAnalysis(null);
+        setIsAnalysisOpen(false);
+    }, [ticker]);
 
     const handleSelectSuggestion = async (stock: StockListItem) => {
         setTicker(stock.stock);
@@ -368,6 +407,59 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                     )}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* AI Analysis Section */}
+                    {stockData && (
+                        <div className="border rounded-md p-3 bg-muted/30">
+                            <button
+                                type="button"
+                                onClick={() => setIsAnalysisOpen(!isAnalysisOpen)}
+                                className="flex items-center justify-between w-full text-sm font-medium"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <Bot className="h-4 w-4 text-primary" />
+                                    Análise IA (Groq)
+                                </div>
+                                {isAnalysisOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+
+                            {isAnalysisOpen && (
+                                <div className="mt-3 text-sm space-y-3 animate-in slide-in-from-top-2">
+                                    {loadingAnalysis ? (
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            Gerando análise...
+                                        </div>
+                                    ) : aiAnalysis ? (
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${aiAnalysis.recommendation === 'buy' ? 'bg-green-500/20 text-green-600' :
+                                                        aiAnalysis.recommendation === 'sell' ? 'bg-red-500/20 text-red-600' :
+                                                            'bg-yellow-500/20 text-yellow-600'
+                                                    }`}>
+                                                    {aiAnalysis.recommendation === 'buy' ? 'Compra' :
+                                                        aiAnalysis.recommendation === 'sell' ? 'Venda' : 'Neutro'}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    Confiança: {aiAnalysis.confidence}%
+                                                </span>
+                                            </div>
+                                            <p className="text-muted-foreground leading-relaxed">
+                                                {aiAnalysis.summary}
+                                            </p>
+                                            <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
+                                                {aiAnalysis.keyPoints.map((point, i) => (
+                                                    <li key={i}>{point}</li>
+                                                ))}
+                                            </ul>
+                                        </>
+                                    ) : (
+                                        <p className="text-muted-foreground">Não foi possível gerar a análise.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 
