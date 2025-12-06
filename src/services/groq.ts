@@ -22,21 +22,39 @@ export const getMarketAnalysis = async (
     const low = Math.min(...prices);
 
     const prompt = `
-    Analyze the stock ${ticker}.
-    Current Price: R$ ${price.toFixed(2)}
-    Period: ${period}
-    Price Change: ${change.toFixed(2)}%
-    High: R$ ${high.toFixed(2)}
-    Low: R$ ${low.toFixed(2)}
+    Analise a ação ${ticker} do mercado brasileiro.
+    Preço Atual: R$ ${price.toFixed(2)}
+    Período: ${period}
+    Variação de Preço: ${change.toFixed(2)}%
+    Máxima: R$ ${high.toFixed(2)}
+    Mínima: R$ ${low.toFixed(2)}
     
-    Provide a concise analysis in JSON format with the following fields:
-    - recommendation: "buy", "sell", "hold", or "neutral"
-    - confidence: number between 0 and 100
-    - summary: A short paragraph (max 3 sentences) explaining the outlook.
-    - keyPoints: Array of 3 short bullet points.
+    Forneça uma análise concisa em formato JSON com os seguintes campos:
+    - recommendation: "buy", "sell", "hold", ou "neutral"
+    - confidence: número entre 0 e 100
+    - summary: Um parágrafo curto (máximo 3 frases) explicando a perspectiva em português do Brasil.
+    - keyPoints: Array com 3 pontos-chave curtos em português do Brasil.
     
-    Respond ONLY with the JSON.
+    Responda APENAS com o JSON. Toda a análise deve estar em português do Brasil.
     `;
+
+    // Check for Demo Mode
+    const isDemoMode = localStorage.getItem("demo_session");
+    if (isDemoMode) {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        return {
+            recommendation: change > 0 ? 'buy' : 'hold',
+            confidence: 85,
+            summary: `[MODO DEMO] Análise simulada para ${ticker}. A ação apresenta comportamento ${change > 0 ? 'positivo' : 'estável'} no período analisado, com fundamentos técnicos que sugerem ${change > 0 ? 'potencial de valorização' : 'cautela no curto prazo'}.`,
+            keyPoints: [
+                `Tendência de ${change > 0 ? 'alta' : 'lateralização'} observada nos últimos dias`,
+                "Volume de negociação dentro da média histórica",
+                "Indicadores técnicos apontam para manutenção da posição"
+            ]
+        };
+    }
 
     try {
         const { data, error } = await supabase.functions.invoke('analyze-stock', {
@@ -68,6 +86,13 @@ export const getStockChatResponse = async (
     message: string,
     context: any
 ): Promise<string> => {
+    // Check for Demo Mode
+    const isDemoMode = localStorage.getItem("demo_session");
+    if (isDemoMode) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return `[MODO DEMO] Olá! Como estamos em modo de demonstração, não posso acessar dados em tempo real de ${ticker} ou processar análises complexas. Em produção, eu responderia sua pergunta: "${message}" com base em dados de mercado atualizados.`;
+    }
+
     const systemPrompt = `
     You are a helpful financial assistant specializing in the Brazilian stock market.
     You are discussing the stock ${ticker}.

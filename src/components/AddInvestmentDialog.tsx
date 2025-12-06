@@ -103,7 +103,7 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                 }
                 setHistoricalData(history);
             } catch (error) {
-                console.error("Error fetching history:", error);
+                console.error("Erro ao buscar histórico:", error);
             } finally {
                 setLoadingHistory(false);
             }
@@ -127,7 +127,7 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                     setAiAnalysis(result);
                     setIsAnalysisOpen(true);
                 } catch (error) {
-                    console.error("Error fetching AI analysis:", error);
+                    console.error("Erro ao buscar análise de IA:", error);
                 } finally {
                     setLoadingAnalysis(false);
                 }
@@ -191,6 +191,36 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
 
         setLoading(true);
         try {
+            // Check for Demo Mode
+            const isDemoMode = localStorage.getItem("demo_session");
+            if (isDemoMode) {
+                const newInvestment = {
+                    id: Math.random().toString(36).substr(2, 9),
+                    user_id: "demo-user",
+                    ticker: stockData.symbol,
+                    quantity: Number(quantity),
+                    purchase_price: Number(price),
+                    purchase_date: new Date(date).toISOString(),
+                };
+
+                const storedInvestments = localStorage.getItem("demo_investments");
+                const investments = storedInvestments ? JSON.parse(storedInvestments) : [];
+                investments.push(newInvestment);
+                localStorage.setItem("demo_investments", JSON.stringify(investments));
+
+                toast.success("Investimento adicionado (Demo)!");
+                onSuccess();
+                onOpenChange(false);
+
+                // Reset form
+                setTicker("");
+                setQuantity("");
+                setPrice("");
+                setStockData(null);
+                setLoading(false);
+                return;
+            }
+
             const { data: { user } } = await supabase.auth.getUser();
 
             if (!user) {
@@ -221,7 +251,7 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
             setStockData(null);
 
         } catch (error: any) {
-            console.error("Error adding investment:", error);
+            console.error("Erro ao adicionar investimento:", error);
             toast.error(error.message || "Erro ao salvar investimento");
         } finally {
             setLoading(false);
@@ -436,8 +466,8 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                         <>
                                             <div className="flex items-center gap-2">
                                                 <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${aiAnalysis.recommendation === 'buy' ? 'bg-green-500/20 text-green-600' :
-                                                        aiAnalysis.recommendation === 'sell' ? 'bg-red-500/20 text-red-600' :
-                                                            'bg-yellow-500/20 text-yellow-600'
+                                                    aiAnalysis.recommendation === 'sell' ? 'bg-red-500/20 text-red-600' :
+                                                        'bg-yellow-500/20 text-yellow-600'
                                                     }`}>
                                                     {aiAnalysis.recommendation === 'buy' ? 'Compra' :
                                                         aiAnalysis.recommendation === 'sell' ? 'Venda' : 'Neutro'}

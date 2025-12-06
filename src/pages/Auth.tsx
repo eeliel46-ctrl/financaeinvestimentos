@@ -38,7 +38,16 @@ const Auth = () => {
       }
     } catch (error: any) {
       console.error("Erro no login:", error);
-      toast.error(error.message || "Erro ao fazer login. Verifique suas credenciais.");
+
+      // Detectar erro de email não confirmado
+      if (error.message?.includes("Email not confirmed") || error.message?.includes("Invalid login credentials")) {
+        toast.error(
+          "Email não confirmado. Verifique sua caixa de entrada e clique no link de confirmação.",
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(error.message || "Erro ao fazer login. Verifique suas credenciais.");
+      }
     }
   };
 
@@ -55,15 +64,31 @@ const Auth = () => {
       if (error) throw error;
 
       if (data.user) {
-        toast.success("Cadastro realizado! Você já pode fazer login.");
+        // Mensagem mais clara sobre verificação de email
+        toast.success(
+          "Cadastro realizado! Verifique seu email para confirmar sua conta antes de fazer login.",
+          { duration: 8000 }
+        );
+        toast.info(
+          "📧 Não esqueça de verificar a pasta de spam caso não encontre o email.",
+          { duration: 8000 }
+        );
         setIsLogin(true);
         setPassword("");
       }
     } catch (error: any) {
       console.error("Erro no cadastro:", error);
-      toast.error(error.message || "Erro ao criar conta.");
+
+      // Mensagens de erro mais específicas
+      if (error.message?.includes("invalid")) {
+        toast.error("Email inválido. Use um endereço de email real (ex: seuemail@gmail.com).");
+      } else {
+        toast.error(error.message || "Erro ao criar conta.");
+      }
     }
   };
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,9 +154,9 @@ const Auth = () => {
                 disabled={loading}
               />
             </div>
-            <Button 
-              className="w-full" 
-              type="submit" 
+            <Button
+              className="w-full"
+              type="submit"
               disabled={loading}
               size="lg"
             >
@@ -144,6 +169,9 @@ const Auth = () => {
                 <>{isLogin ? "Entrar" : "Criar Conta"}</>
               )}
             </Button>
+
+
+
             <div className="text-center text-sm pt-2">
               <button
                 type="button"

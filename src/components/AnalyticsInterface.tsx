@@ -488,11 +488,11 @@ export const AnalyticsInterface = () => {
                       {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2">
                     <Tabs value={selectedRange} onValueChange={(v) => setSelectedRange(v as any)}>
-                      <TabsList className="h-7 p-0 bg-transparent">
+                      <TabsList className="h-8 p-1 bg-muted">
                         {['1d', '5d', '30d', '60d', '1y'].map((range) => (
-                          <TabsTrigger key={range} value={range} className="h-7 px-2 text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-sm">
+                          <TabsTrigger key={range} value={range} className="h-6 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
                             {range.toUpperCase()}
                           </TabsTrigger>
                         ))}
@@ -637,8 +637,8 @@ export const AnalyticsInterface = () => {
                       >
                         <div
                           className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted'
                             }`}
                         >
                           <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
