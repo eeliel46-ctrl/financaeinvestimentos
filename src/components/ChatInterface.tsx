@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Send, Bot, User, Check, X, Image as ImageIcon, Mic, MicOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useExpenses } from "@/contexts/ExpenseContext";
+import { AudioRecorder } from "@/services/audioRecorder";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   id: string;
@@ -46,6 +48,7 @@ export const ChatInterface = () => {
   const [pendingConfirmation, setPendingConfirmation] = useState<ExpenseConfirmation | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
+  const [audioRecorder] = useState(() => new AudioRecorder());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -91,30 +94,68 @@ export const ChatInterface = () => {
     }
   }, []);
 
-  const toggleVoiceRecognition = () => {
-    if (!recognition) {
-      toast({
-        title: "Recurso não disponível",
-        description: "Seu navegador não suporta reconhecimento de voz. Use Chrome, Edge ou Safari.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const toggleVoiceRecognition = async () => {
     if (isListening) {
-      recognition.stop();
-      setIsListening(false);
-    } else {
+      // Stop recording and transcribe
       try {
-        recognition.start();
+        setIsListening(false);
+        const audioBlob = await audioRecorder.stop();
+
+        toast({
+          title: "Processando áudio...",
+          description: "Enviando para transcrição",
+        });
+
+        // Send audio to Edge Function for transcription
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'recording.webm');
+
+        const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+          body: formData,
+        });
+
+        if (error) {
+          console.error('Transcription error:', error);
+          toast({
+            title: "Erro na transcrição",
+            description: "Não foi possível transcrever o áudio. Tente novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (data?.text) {
+          setInputValue(data.text);
+          toast({
+            title: "✅ Transcrição concluída",
+            description: "Texto adicionado ao campo",
+          });
+        }
+      } catch (error) {
+        console.error('Error stopping recording:', error);
+        setIsListening(false);
+        toast({
+          title: "Erro ao parar gravação",
+          description: error instanceof Error ? error.message : "Erro desconhecido",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Start recording
+      try {
+        await audioRecorder.start();
         setIsListening(true);
         toast({
-          title: "🎤 Escutando...",
-          description: "Fale sua despesa ou receita",
+          title: "🎤 Gravando...",
+          description: "Fale sua despesa ou receita. Clique novamente para parar.",
         });
       } catch (error) {
-        console.error('Error starting recognition:', error);
-        setIsListening(false);
+        console.error('Error starting recording:', error);
+        toast({
+          title: "Erro ao iniciar gravação",
+          description: error instanceof Error ? error.message : "Permita o acesso ao microfone",
+          variant: "destructive",
+        });
       }
     }
   };
