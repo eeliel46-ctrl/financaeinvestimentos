@@ -89,7 +89,7 @@ export const ChatInterface = () => {
 
       setRecognition(recognitionInstance);
     }
-  }, [toast]);
+  }, []);
 
   const toggleVoiceRecognition = () => {
     if (!recognition) {
@@ -322,8 +322,8 @@ export const ChatInterface = () => {
           >
             <div
               className={`max-w-[80%] ${message.type === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border"
+                ? "bg-primary text-primary-foreground"
+                : "bg-card border"
                 } rounded-lg p-3 shadow-card`}
             >
               <div className="flex items-start gap-2">
