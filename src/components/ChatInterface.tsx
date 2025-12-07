@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Check, X, Image as ImageIcon } from "lucide-react";
+import { Send, Bot, User, Check, X, Image as ImageIcon, Mic, MicOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useExpenses } from "@/contexts/ExpenseContext";
 
@@ -44,6 +44,8 @@ export const ChatInterface = () => {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<ExpenseConfirmation | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [recognition, setRecognition] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -55,12 +57,74 @@ export const ChatInterface = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Initialize Web Speech Recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'pt-BR';
+
+      recognitionInstance.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputValue(transcript);
+        setIsListening(false);
+      };
+
+      recognitionInstance.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        toast({
+          title: "Erro no reconhecimento de voz",
+          description: "Não foi possível capturar o áudio. Tente novamente.",
+          variant: "destructive",
+        });
+      };
+
+      recognitionInstance.onend = () => {
+        setIsListening(false);
+      };
+
+      setRecognition(recognitionInstance);
+    }
+  }, [toast]);
+
+  const toggleVoiceRecognition = () => {
+    if (!recognition) {
+      toast({
+        title: "Recurso não disponível",
+        description: "Seu navegador não suporta reconhecimento de voz. Use Chrome, Edge ou Safari.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognition.start();
+        setIsListening(true);
+        toast({
+          title: "🎤 Escutando...",
+          description: "Fale sua despesa ou receita",
+        });
+      } catch (error) {
+        console.error('Error starting recognition:', error);
+        setIsListening(false);
+      }
+    }
+  };
+
   // Simula processamento de IA para extrair dados da despesa ou receita
   const processExpenseMessage = (message: string): ExpenseConfirmation | null => {
     // Regex patterns para extrair informações
     const amountPattern = /R?\$?\s?(\d+[.,]?\d*)/;
     const locationPattern = /(no|na|em)\s+([^0-9]+?)(?:\s|$)/i;
-    
+
     const amountMatch = message.match(amountPattern);
     if (!amountMatch) return null;
 
@@ -69,13 +133,13 @@ export const ChatInterface = () => {
     const location = locationMatch ? locationMatch[2].trim() : undefined;
 
     const lowerMessage = message.toLowerCase();
-    
+
     // Detectar se é receita (começando com "recebi") ou despesa (começando com "paguei" ou padrão)
     const isIncome = lowerMessage.startsWith("recebi");
     const isExpense = lowerMessage.startsWith("paguei") || lowerMessage.startsWith("gastei");
-    
+
     let category = "Outras";
-    
+
     if (isIncome) {
       // Categorização de receitas
       const incomeCategories = {
@@ -85,7 +149,7 @@ export const ChatInterface = () => {
         "Boleto": ["boleto"],
         "Extra": ["extra", "freelance", "bico"],
       };
-      
+
       for (const [cat, keywords] of Object.entries(incomeCategories)) {
         if (keywords.some(keyword => lowerMessage.includes(keyword))) {
           category = cat;
@@ -103,7 +167,7 @@ export const ChatInterface = () => {
         "Transporte Fixo": ["transporte fixo", "metrô", "metro", "combustível", "combustivel", "uber mensal"],
         "Mensalidades": ["mensalidade", "academia", "escola", "streaming", "netflix", "spotify"],
         "Plano de Saúde": ["plano de saúde", "plano de saude", "convênio", "convenio"],
-        
+
         // Despesas Variáveis
         "Alimentação": ["alimentação", "alimentacao", "supermercado", "restaurante", "comida", "lanche", "jantar", "almoço", "almoco", "café", "cafe", "padaria"],
         "Lazer": ["lazer", "cinema", "bar", "balada", "show", "teatro", "parque", "festa"],
@@ -111,13 +175,13 @@ export const ChatInterface = () => {
         "Farmácia": ["farmácia", "farmacia", "remédio", "remedio", "medicamento"],
         "Roupas": ["roupas", "roupa", "vestuário", "vestuario", "sapato", "calça", "calca", "camisa", "vestido"],
         "Manutenção do Carro": ["manutenção do carro", "manutencao do carro", "mecânico", "mecanico", "revisão", "revisao"],
-        
+
         // Dívidas e Obrigações
         "Empréstimos": ["empréstimo", "emprestimo"],
         "Cartão de Crédito": ["cartão de crédito", "cartao de credito", "fatura"],
         "Financiamentos": ["financiamento", "boleto carro"],
         "Parcelamentos": ["parcelamento", "parcela"],
-        
+
         // Gastos Anuais/Periódicos
         "IPVA": ["ipva"],
         "IPTU": ["iptu"],
@@ -125,14 +189,14 @@ export const ChatInterface = () => {
         "Renovações": ["renovação", "renovacao", "assinatura anual"],
         "Material Escolar": ["material escolar"],
         "Viagens": ["viagem", "viagens", "passagem", "hotel"],
-        
+
         // Gastos Não Planejados
         "Emergências": ["emergência", "emergencia", "urgência", "urgencia"],
         "Saúde": ["saúde", "saude", "médico", "medico", "hospital", "consulta", "dentista"],
         "Consertos": ["conserto", "reparo"],
         "Multas": ["multa"],
       };
-      
+
       for (const [cat, keywords] of Object.entries(expenseCategories)) {
         if (keywords.some(keyword => lowerMessage.includes(keyword))) {
           category = cat;
@@ -257,11 +321,10 @@ export const ChatInterface = () => {
             className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] ${
-                message.type === "user"
+              className={`max-w-[80%] ${message.type === "user"
                   ? "bg-primary text-primary-foreground"
                   : "bg-card border"
-              } rounded-lg p-3 shadow-card`}
+                } rounded-lg p-3 shadow-card`}
             >
               <div className="flex items-start gap-2">
                 {message.type === "bot" && (
@@ -272,7 +335,7 @@ export const ChatInterface = () => {
                 )}
                 <div className="flex-1">
                   <p className="text-sm">{message.content}</p>
-                  
+
                   {/* Expense confirmation card */}
                   {message.expense && (
                     <Card className="mt-3 p-3 bg-gradient-chart">
@@ -296,13 +359,13 @@ export const ChatInterface = () => {
                         <p className="text-xs text-muted-foreground">
                           📅 {message.expense.date.toLocaleDateString()}
                         </p>
-                        
+
                         {pendingConfirmation && (
                           <div className="space-y-3 mt-3">
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 <label className="text-xs font-medium">Tipo:</label>
-                                <select 
+                                <select
                                   value={pendingConfirmation.type}
                                   onChange={(e) => setPendingConfirmation({
                                     ...pendingConfirmation,
@@ -328,17 +391,17 @@ export const ChatInterface = () => {
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 onClick={handleConfirmExpense}
                                 className="flex-1"
                               >
                                 <Check className="h-4 w-4 mr-1" />
                                 Confirmar
                               </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 onClick={handleRejectExpense}
                                 className="flex-1"
                               >
@@ -359,7 +422,7 @@ export const ChatInterface = () => {
             </div>
           </div>
         ))}
-        
+
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-card border rounded-lg p-3 shadow-card">
@@ -374,28 +437,40 @@ export const ChatInterface = () => {
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
       <div className="border-t border-border p-4">
         <div className="flex gap-2">
-          <Button variant="outline" size="icon">
-            <ImageIcon className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleVoiceRecognition}
+            className={isListening ? "bg-red-500 text-white hover:bg-red-600" : ""}
+            title={isListening ? "Parar gravação" : "Gravar voz"}
+          >
+            {isListening ? <MicOff className="h-4 w-4 animate-pulse" /> : <Mic className="h-4 w-4" />}
           </Button>
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ex: Gastei R$ 45 no supermercado hoje..."
+            placeholder={isListening ? "Escutando..." : "Ex: Gastei R$ 45 no supermercado hoje..."}
             onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-            disabled={isLoading}
+            disabled={isLoading || isListening}
             className="flex-1"
           />
-          <Button onClick={handleSendMessage} disabled={isLoading || !inputValue.trim()}>
+          <Button onClick={handleSendMessage} disabled={isLoading || !inputValue.trim() || isListening}>
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {isListening && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            Fale agora... (clique no microfone novamente para parar)
+          </p>
+        )}
       </div>
     </div>
   );
