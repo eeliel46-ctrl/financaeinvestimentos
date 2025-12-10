@@ -171,3 +171,156 @@ export const getStockChatResponse = async (
         return `Erro: ${error.message || "Desculpe, estou com dificuldades para processar sua pergunta agora."}`;
     }
 };
+
+export const getMarketNewsAI = async (gainers: any[], losers: any[]): Promise<string[]> => {
+    // Check for Demo Mode
+    const isDemoMode = localStorage.getItem("demo_session");
+    if (isDemoMode) {
+        return [
+            "Setor de Varejo impulsiona altas com otimismo sobre vendas trimestrais.",
+            "Commodities recuam devido à desaceleração da demanda chinesa, afetando mineradoras."
+        ];
+    }
+
+    const prompt = `
+    Com base nas maiores altas e baixas da bolsa brasileira hoje:
+    
+    ALTAS: ${gainers.map(s => `${s.stock} (${s.change}%)`).join(', ')}
+    BAIXAS: ${losers.map(s => `${s.stock} (${s.change}%)`).join(', ')}
+    
+    Gere 2 manchetes curtas de notícias fictícias mas plausíveis (baseadas na lógica de mercado e setores) que explicariam esses movimentos.
+    Foque nos setores (Ex: "Setor bancário sobe...", "Petróleo cai...").
+    
+    Retorne APENAS um JSON array de strings. Exemplo: ["Manchete 1", "Manchete 2"]
+    `;
+
+    try {
+        const { data, error } = await supabase.functions.invoke('analyze-stock', {
+            body: {
+                message: prompt,
+                systemPrompt: "You are a financial news editor. Generate 2 plausible headlines explaining market movements based on the tickers provided. Output ONLY a raw JSON array of strings.",
+                jsonMode: true,
+                temperature: 0.7
+            }
+        });
+
+        if (error) throw error;
+
+        const content = JSON.parse(data.choices[0].message.content);
+        // Ensure we handle both object with 'headlines' key or direct array
+        return Array.isArray(content) ? content : (content.headlines || content.news || []);
+    } catch (error: any) {
+        console.error("AI News Error:", error);
+        return [
+            "Mercado reage a indicadores econômicos globais com volatilidade nos principais papéis.",
+            "Investidores ajustam posições aguardando novas definições fiscais."
+        ];
+    }
+};
+
+export interface AIExpenseResult {
+    amount: number;
+    description: string;
+    category: string;
+    type: 'receita' | 'despesa' | 'investimento';
+    location?: string;
+    confidence: number;
+    investmentData?: {
+        ticker: string;
+        quantity: number;
+        price: number;
+    };
+}
+
+export const parseExpenseWithAI = async (text: string): Promise<AIExpenseResult | null> => {
+    // Check for Demo Mode
+    const isDemoMode = localStorage.getItem("demo_session");
+    if (isDemoMode) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Simple demo fallback logic for testing without API cost
+        const amountMatch = text.match(/[\d.,]+/);
+        const amount = amountMatch ? parseFloat(amountMatch[0].replace(/\./g, '').replace(',', '.')) : 0;
+
+        if (text.toLowerCase().includes('compra') || text.toLowerCase().includes('comprei') || text.toLowerCase().includes('ação')) {
+            return {
+                amount: amount || 100,
+                description: text,
+                category: "Investimentos",
+                type: 'investimento',
+                confidence: 0.9,
+                investmentData: {
+                    ticker: "PETR4",
+                    quantity: 10,
+                    price: 30.50
+                }
+            };
+        }
+
+        return {
+            amount: amount || 0,
+            description: text,
+            category: "Outros",
+            type: text.toLowerCase().includes('recebi') ? 'receita' : 'despesa',
+            confidence: 0.8
+        };
+    }
+
+    const prompt = `
+    Analise a seguinte frase financeira: "${text}"
+    
+    Identifique se é uma **DESPESA**, **RECEITA** ou **INVESTIMENTO** (compra de ações/fundos).
+
+    REGRAS CRÍTICAS PARA NÚMEROS:
+    - O formato brasileiro usa PONTO para milhar e VÍRGULA para decimais (Ex: 1.000,00).
+    - "1.000" DEVE ser interpretado como MIL (1000), não como UM (1).
+    - "1,000" DEVE ser interpretado como UM (1).
+    - Se o usuário escrever "1k", entenda como 1000.
+    
+    SE FOR INVESTIMENTO (ex: "Comprei 100 ações da Petrobras por 30 reais"):
+    - Tente identificar o TICKER da ação pelo nome da empresa. 
+      Exemplos: 
+      "Petrobras" -> "PETR4"
+      "Vale" -> "VALE3"
+      "Itaú" -> "ITUB4"
+      "Banco do Brasil" -> "BBAS3"
+      "Bradesco" -> "BBDC4"
+      Se não souber, use o nome da empresa em caixa alta (ex: "AMBEV").
+    - Extraia a QUANTIDADE e o PREÇO UNITÁRIO.
+    - Se o usuário disser o total gasto e a quantidade, calcule o preço unitário.
+    - Se disser o preço unitário e a quantidade, calcule o total (amount).
+
+    Retorne APENAS um JSON com:
+    - amount: número (float). Valor total da transação.
+    - description: descrição resumida.
+    - category: escolha a melhor categoria (Investimentos, Alimentação, etc).
+    - type: 'receita', 'despesa' ou 'investimento'.
+    - location: estabelecimento (se houver) ou null.
+    - confidence: 0 a 1.
+    - investmentData: (APENAS SE type='investimento') {
+        ticker: string (ex: "PETR4"),
+        quantity: number (inteiro),
+        price: number (preço unitário)
+      }
+    
+    Se não for transação financeira, retorne null.
+    `;
+
+    try {
+        const { data, error } = await supabase.functions.invoke('analyze-stock', {
+            body: {
+                message: prompt,
+                systemPrompt: "You are a financial parsing expert. Output ONLY valid JSON. Detect investments and infer B3 Tickers.",
+                jsonMode: true,
+                temperature: 0.1
+            }
+        });
+
+        if (error) throw error;
+
+        const content = JSON.parse(data.choices[0].message.content);
+        return content;
+    } catch (error) {
+        console.error("AI Expense Parsing Error:", error);
+        return null;
+    }
+};

@@ -1,4 +1,4 @@
-
+import { useState, useEffect } from "react";
 import { useExpenses } from "@/contexts/ExpenseContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,8 +9,10 @@ import {
   TrendingUp,
   PieChart,
   Target,
-  LogOut
+  LogOut,
+  Download
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface SidebarProps {
   activeTab: string;
@@ -19,6 +21,32 @@ interface SidebarProps {
 
 export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const { signOut } = useExpenses();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      toast.success("Aplicativo instalando...");
+    }
+  };
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Home },
@@ -31,19 +59,21 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   ];
 
   return (
-    <div className="w-64 h-screen bg-gradient-primary p-6 flex flex-col">
+    <div className="w-64 h-screen bg-black/95 border-r border-white/10 p-6 flex flex-col backdrop-blur-xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-primary-foreground flex items-center gap-2">
-          <BarChart3 className="h-8 w-8" />
-          FinanceBot
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <div className="bg-yellow-500 p-1.5 rounded-lg">
+            <BarChart3 className="h-5 w-5 text-black" />
+          </div>
+          Finance<span className="text-yellow-500">Bot</span>
         </h1>
-        <p className="text-primary-foreground/80 text-sm mt-1">
-          Seu assistente financeiro
+        <p className="text-zinc-400 text-sm mt-2 ml-1">
+          XP Style Edition
         </p>
       </div>
 
       <nav className="flex-1">
-        <ul className="space-y-2">
+        <ul className="space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -51,10 +81,10 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
             return (
               <li key={item.id}>
                 <Button
-                  variant={isActive ? "secondary" : "ghost"}
-                  className={`w-full justify-start gap-3 h-12 ${isActive
-                    ? "bg-white/20 text-primary-foreground hover:bg-white/30"
-                    : "text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground"
+                  variant="ghost"
+                  className={`w-full justify-start gap-3 h-11 transition-all duration-200 ${isActive
+                    ? "bg-yellow-500 text-black font-semibold shadow-lg shadow-yellow-500/20 hover:bg-yellow-400"
+                    : "text-zinc-400 hover:bg-white/5 hover:text-white"
                     }`}
                   onClick={() => onTabChange(item.id)}
                 >
@@ -67,10 +97,21 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
         </ul>
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-primary-foreground/10">
+      <div className="mt-auto space-y-2 pt-6 border-t border-white/10">
+        {deferredPrompt && (
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 h-11 text-zinc-400 hover:bg-white/5 hover:text-green-400"
+            onClick={handleInstallClick}
+          >
+            <Download className="h-5 w-5" />
+            Instalar App
+          </Button>
+        )}
+
         <Button
           variant="ghost"
-          className="w-full justify-start gap-3 h-12 text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground"
+          className="w-full justify-start gap-3 h-11 text-zinc-400 hover:bg-white/5 hover:text-red-400"
           onClick={signOut}
         >
           <LogOut className="h-5 w-5" />

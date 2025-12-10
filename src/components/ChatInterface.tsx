@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, Bot, User, Check, X, Image as ImageIcon, Mic, MicOff } from "lucide-react";
+import { Send, Bot, User, Check, X, Image as ImageIcon, Mic, MicOff, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useExpenses } from "@/contexts/ExpenseContext";
 import { AudioRecorder } from "@/services/audioRecorder";
 import { supabase } from "@/integrations/supabase/client";
+import { getStockChatResponse, parseExpenseWithAI } from "@/services/groq";
 
 interface Message {
   id: string;
@@ -30,7 +31,12 @@ interface ExpenseConfirmation {
   category: string;
   location?: string;
   date: Date;
-  type: 'receita' | 'despesa';
+  type: 'receita' | 'despesa' | 'investimento';
+  investmentData?: {
+    ticker: string;
+    quantity: number;
+    price: number;
+  };
 }
 
 export const ChatInterface = () => {
@@ -256,6 +262,85 @@ export const ChatInterface = () => {
     };
   };
 
+  const handleConfirmInvestment = async () => {
+    if (!pendingConfirmation || !pendingConfirmation.investmentData) return;
+
+    try {
+      // Check for Demo Mode
+      const isDemoMode = localStorage.getItem("demo_session");
+      if (isDemoMode) {
+        toast({
+          title: "Investimento registrado (Demo)!",
+          description: `${pendingConfirmation.investmentData.quantity}x ${pendingConfirmation.investmentData.ticker} a R$ ${pendingConfirmation.investmentData.price.toFixed(2)}`,
+        });
+
+        const confirmMessage: Message = {
+          id: Date.now().toString(),
+          type: "bot",
+          content: `✅ Investimento em ${pendingConfirmation.investmentData.ticker} registrado com sucesso!`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, confirmMessage]);
+        setPendingConfirmation(null);
+
+        // Dispatch custom event to notify InvestmentsInterface
+        window.dispatchEvent(new CustomEvent('investmentAdded'));
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Você precisa estar logado para salvar investimentos.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('investments')
+        .insert({
+          user_id: user.id,
+          ticker: pendingConfirmation.investmentData.ticker.trim().toUpperCase(),
+          quantity: pendingConfirmation.investmentData.quantity,
+          purchase_price: pendingConfirmation.investmentData.price,
+          purchase_date: pendingConfirmation.date.toISOString(),
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Investimento Adicionado!",
+        description: `${pendingConfirmation.investmentData.quantity}x ${pendingConfirmation.investmentData.ticker} salvos na carteira.`,
+      });
+
+      const confirmMessage: Message = {
+        id: Date.now().toString(),
+        type: "bot",
+        content: `✅ Investimento em ${pendingConfirmation.investmentData.ticker} registrado com sucesso! Pode conferir na aba de Investimentos.`,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, confirmMessage]);
+      setPendingConfirmation(null);
+
+      // Dispatch custom event to notify InvestmentsInterface
+      window.dispatchEvent(new CustomEvent('investmentAdded'));
+
+    } catch (error: any) {
+      console.error("Erro ao salvar investimento:", error);
+      toast({
+        title: "Erro ao salvar",
+        description: error.message || "Não foi possível registrar o investimento.",
+        variant: "destructive"
+      });
+    }
+  };
+
+
+
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -270,34 +355,91 @@ export const ChatInterface = () => {
     setInputValue("");
     setIsLoading(true);
 
-    // Simula processamento de IA
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // Tenta usar IA primeiro para maior precisão
+      const aiExpenseData = await parseExpenseWithAI(inputValue);
 
-    const expenseData = processExpenseMessage(inputValue);
+      let expenseData: ExpenseConfirmation | null = null;
 
-    if (expenseData) {
-      const confirmationMessage: Message = {
+      if (aiExpenseData && aiExpenseData.amount > 0) {
+        expenseData = {
+          amount: aiExpenseData.amount,
+          description: aiExpenseData.description,
+          category: aiExpenseData.category,
+          location: aiExpenseData.location,
+          date: new Date(),
+          type: aiExpenseData.type
+        };
+
+        if (aiExpenseData.type === 'investimento' && aiExpenseData.investmentData) {
+          expenseData.investmentData = aiExpenseData.investmentData;
+        }
+      } else {
+        // Fallback para Regex antigo se IA falhar ou não achar nada
+        expenseData = processExpenseMessage(inputValue);
+      }
+
+      if (expenseData) {
+        if (expenseData.type === 'investimento') {
+          const confirmationMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "bot",
+            content: `Identifiquei uma compra de ações! Confirme os dados do investimento:`,
+            timestamp: new Date(),
+            expense: expenseData,
+          };
+          setMessages(prev => [...prev, confirmationMessage]);
+          setPendingConfirmation(expenseData);
+        } else {
+          const confirmationMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "bot",
+            content: `Identifiquei uma ${expenseData.type === 'receita' ? 'receita' : 'despesa'}! Por favor, confirme os dados:`,
+            timestamp: new Date(),
+            expense: expenseData,
+          };
+          setMessages(prev => [...prev, confirmationMessage]);
+          setPendingConfirmation(expenseData);
+        }
+      } else {
+        // Se não for despesa, tenta responder como chat financeiro
+        const chatResponse = await getStockChatResponse("MERCADO", inputValue, { price: 0, change: 0 }); // Contexto genérico
+
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: "bot",
+          content: chatResponse.includes("Erro") ?
+            "Não entendi. Tente 'Gastei 50 no mercado' ou pergunte sobre ações." :
+            chatResponse,
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, botMessage]);
+      }
+    } catch (e) {
+      console.error(e);
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: "bot",
-        content: `Identifiquei uma ${expenseData.type === 'receita' ? 'receita' : 'despesa'}! Por favor, confirme os dados:`,
-        timestamp: new Date(),
-        expense: expenseData,
-      };
-
-      setMessages(prev => [...prev, confirmationMessage]);
-      setPendingConfirmation(expenseData);
-    } else {
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: "bot",
-        content: "Não consegui identificar uma transação nessa mensagem. Tente algo como:\n• Despesa: 'Gastei R$ 50 no supermercado'\n• Receita: 'Recebi R$ 3000 salário'",
+        content: "Desculpe, tive um erro ao processar. Pode tentar novamente?",
         timestamp: new Date(),
       };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      setMessages(prev => [...prev, botMessage]);
+  const handleConfirmAction = () => {
+    if (!pendingConfirmation) return;
+
+    if (pendingConfirmation.type === 'investimento') {
+      handleConfirmInvestment();
+      return;
     }
 
-    setIsLoading(false);
+    // ... existing expense handling ...
+    handleConfirmExpense();
   };
 
   const handleConfirmExpense = () => {
@@ -397,11 +539,84 @@ export const ChatInterface = () => {
                             📍 {message.expense.location}
                           </p>
                         )}
+
+                        {/* Investment Data Section - Editable if pending */}
+                        {message.expense.investmentData && (
+                          <div className="mt-2 p-2 bg-background/50 rounded text-sm border border-border/50">
+                            {pendingConfirmation && message.id === messages[messages.length - 1].id ? (
+                              <>
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-muted-foreground w-20">Ticker:</span>
+                                  <input
+                                    className="w-full text-right bg-transparent border-b border-border focus:border-primary outline-none font-bold font-mono"
+                                    value={pendingConfirmation.investmentData?.ticker}
+                                    onChange={(e) => setPendingConfirmation({
+                                      ...pendingConfirmation,
+                                      investmentData: {
+                                        ...pendingConfirmation.investmentData!,
+                                        ticker: e.target.value.toUpperCase()
+                                      }
+                                    })}
+                                  />
+                                </div>
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-muted-foreground w-20">Qtd:</span>
+                                  <input
+                                    type="number"
+                                    className="w-full text-right bg-transparent border-b border-border focus:border-primary outline-none"
+                                    value={pendingConfirmation.investmentData?.quantity}
+                                    onChange={(e) => setPendingConfirmation({
+                                      ...pendingConfirmation,
+                                      investmentData: {
+                                        ...pendingConfirmation.investmentData!,
+                                        quantity: parseInt(e.target.value) || 0
+                                      }
+                                    })}
+                                  />
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-muted-foreground w-20">Preço:</span>
+                                  <div className="flex items-center w-full justify-end border-b border-border focus-within:border-primary">
+                                    <span className="mr-1">R$</span>
+                                    <input
+                                      type="number"
+                                      className="w-20 text-right bg-transparent outline-none"
+                                      value={pendingConfirmation.investmentData?.price}
+                                      onChange={(e) => setPendingConfirmation({
+                                        ...pendingConfirmation,
+                                        investmentData: {
+                                          ...pendingConfirmation.investmentData!,
+                                          price: parseFloat(e.target.value) || 0
+                                        }
+                                      })}
+                                    />
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Ticker:</span>
+                                  <span className="font-bold font-mono">{message.expense.investmentData.ticker}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Quantidade:</span>
+                                  <span>{message.expense.investmentData.quantity}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Preço Unitário:</span>
+                                  <span>R$ {message.expense.investmentData.price.toFixed(2)}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+
                         <p className="text-xs text-muted-foreground">
                           📅 {message.expense.date.toLocaleDateString()}
                         </p>
 
-                        {pendingConfirmation && (
+                        {pendingConfirmation && message.id === messages[messages.length - 1].id && (
                           <div className="space-y-3 mt-3">
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
@@ -410,12 +625,13 @@ export const ChatInterface = () => {
                                   value={pendingConfirmation.type}
                                   onChange={(e) => setPendingConfirmation({
                                     ...pendingConfirmation,
-                                    type: e.target.value as 'receita' | 'despesa'
+                                    type: e.target.value as 'receita' | 'despesa' | 'investimento'
                                   })}
                                   className="px-2 py-1 text-xs rounded border bg-background text-foreground"
                                 >
                                   <option value="despesa">Despesa</option>
                                   <option value="receita">Receita</option>
+                                  <option value="investimento">Investimento</option>
                                 </select>
                               </div>
                               <div className="flex items-center gap-2">
@@ -434,7 +650,7 @@ export const ChatInterface = () => {
                             <div className="flex gap-2">
                               <Button
                                 size="sm"
-                                onClick={handleConfirmExpense}
+                                onClick={handleConfirmAction}
                                 className="flex-1"
                               >
                                 <Check className="h-4 w-4 mr-1" />

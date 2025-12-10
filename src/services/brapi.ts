@@ -319,3 +319,53 @@ export const getStockHistory = async (ticker: string, range: HistoryRange = 30, 
         return [];
     }
 };
+
+export interface MarketMovers {
+    gainers: StockListItem[];
+    losers: StockListItem[];
+}
+
+export const getTopMovers = async (): Promise<MarketMovers> => {
+    try {
+        const stocks = await getAllStocks();
+        if (stocks.length === 0) return { gainers: [], losers: [] };
+
+        // Filter valid stocks
+        // 1. Regex: Must be 4 letters followed by 3, 4, 5, 6 or 11.
+        //    (Standard ON, PN, PNA, PNB, UNIT/ETF/FII)
+        // 2. Name Blocklist: Remove FIIs, ETFs, BDRs based on common keywords in name.
+        // 3. Liquidity: Volume > 0 and Price > 0
+        const tickerRegex = /^[A-Z]{4}(3|4|5|6|11)$/;
+
+        const validStocks = stocks.filter(s => {
+            const symbol = s.stock.toUpperCase();
+            const name = (s.name || "").toUpperCase();
+
+            // Basic Ticker Format Check
+            if (!tickerRegex.test(symbol)) return false;
+
+            // Explicit Exclusions by Keyword in Name (or Sector if reliable)
+            if (name.includes("FII ") || name.includes("FUNDO ") || name.includes("ETF ") || name.includes("BDR")) return false;
+            // Also check suffixes strictly for BDRs if regex didn't catch (regex catches 3,4,5,6,11, so 34 is filtered out automatically by regex!)
+
+            // Liquidity
+            if ((s.volume || 0) === 0 || (s.close || 0) <= 0) return false;
+
+            return true;
+        });
+
+        // Sort by change descending
+        const sorted = [...validStocks].sort((a, b) => (b.change || 0) - (a.change || 0));
+
+        // Get top 15 gainers
+        const gainers = sorted.slice(0, 15);
+
+        // Get top 15 losers (last 15 elements, reversed to show worst first)
+        const losers = sorted.slice(-15).reverse();
+
+        return { gainers, losers };
+    } catch (error) {
+        console.error("Error getting top movers:", error);
+        return { gainers: [], losers: [] };
+    }
+};

@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 
 const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,7 +22,31 @@ const Auth = () => {
         navigate("/");
       }
     });
+
+    // PWA install prompt
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, [navigate]);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      toast.success("Aplicativo instalando...");
+    }
+  };
 
   const handleLogin = async () => {
     try {
@@ -170,7 +195,18 @@ const Auth = () => {
               )}
             </Button>
 
-
+            {deferredPrompt && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleInstallClick}
+                size="lg"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Baixar Aplicativo
+              </Button>
+            )}
 
             <div className="text-center text-sm pt-2">
               <button

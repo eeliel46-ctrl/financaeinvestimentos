@@ -77,12 +77,10 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                 let history: HistoricalPrice[] = [];
                 if (timeRange === '1d') {
                     history = await getStockHistory(stockData.symbol, '1d', '15m');
-                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1d', '30m');
+                    // Try 5m if 15m doesn't work
+                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1d', '5m');
+                    // Fallback to 5d if no intraday data available
                     if (history.length <= 1) history = await getStockHistory(stockData.symbol, '5d', '1d');
-                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1mo', '1d');
-                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '3mo', '1d');
-                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '6mo', '1d');
-                    if (history.length <= 1) history = await getStockHistory(stockData.symbol, '1y', '1d');
                 } else if (timeRange === '5d') {
                     history = await getStockHistory(stockData.symbol, '5d', '1d');
                     if (history.length <= 1) history = await getStockHistory(stockData.symbol, '7d', '1d');
@@ -110,33 +108,32 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
         };
 
         fetchHistory();
-        fetchHistory();
     }, [stockData, timeRange]);
 
-    // Fetch AI Analysis when stock data and history are available
-    useEffect(() => {
-        const fetchAnalysis = async () => {
-            if (stockData && historicalData.length > 0 && !aiAnalysis) {
-                setLoadingAnalysis(true);
-                try {
-                    const result = await getMarketAnalysis(
-                        stockData.symbol,
-                        stockData.regularMarketPrice,
-                        historicalData
-                    );
-                    setAiAnalysis(result);
-                    setIsAnalysisOpen(true);
-                } catch (error) {
-                    console.error("Erro ao buscar análise de IA:", error);
-                } finally {
-                    setLoadingAnalysis(false);
-                }
-            }
-        };
+    // Manual AI Analysis Trigger
+    const handleAnalyze = async () => {
+        if (!stockData || historicalData.length === 0) {
+            toast.error("Dados insuficientes para análise. Aguarde o carregar do histórico.");
+            return;
+        }
 
-        const debounce = setTimeout(fetchAnalysis, 1000); // Debounce to avoid too many requests
-        return () => clearTimeout(debounce);
-    }, [stockData, historicalData]);
+        setLoadingAnalysis(true);
+        setIsAnalysisOpen(true);
+        try {
+            const result = await getMarketAnalysis(
+                stockData.symbol,
+                stockData.regularMarketPrice,
+                historicalData
+            );
+            setAiAnalysis(result);
+        } catch (error) {
+            console.error("Erro ao buscar análise de IA:", error);
+            toast.error("Erro ao gerar análise");
+            setIsAnalysisOpen(false);
+        } finally {
+            setLoadingAnalysis(false);
+        }
+    };
 
     // Reset analysis when stock changes
     useEffect(() => {
@@ -209,6 +206,10 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                 localStorage.setItem("demo_investments", JSON.stringify(investments));
 
                 toast.success("Investimento adicionado (Demo)!");
+
+                // Dispatch custom event to notify InvestmentsInterface
+                window.dispatchEvent(new CustomEvent('investmentAdded'));
+
                 onSuccess();
                 onOpenChange(false);
 
@@ -232,7 +233,7 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                 .from('investments')
                 .insert({
                     user_id: user.id,
-                    ticker: stockData.symbol,
+                    ticker: stockData.symbol.trim().toUpperCase(),
                     quantity: Number(quantity),
                     purchase_price: Number(price),
                     purchase_date: new Date(date).toISOString(),
@@ -241,6 +242,10 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
             if (error) throw error;
 
             toast.success("Investimento adicionado com sucesso!");
+
+            // Dispatch custom event to notify InvestmentsInterface
+            window.dispatchEvent(new CustomEvent('investmentAdded'));
+
             onSuccess();
             onOpenChange(false);
 
@@ -273,74 +278,71 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Adicionar Investimento</DialogTitle>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="ticker">Código da Ação (Ticker)</Label>
-                        <div className="relative">
-                            <div className="flex gap-2">
-                                <Input
-                                    ref={inputRef}
-                                    id="ticker"
-                                    value={ticker}
-                                    onChange={(e) => {
-                                        setTicker(e.target.value.toUpperCase());
-                                        setStockData(null);
-                                    }}
-                                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                                    placeholder="Digite o código (ex: PETR4, VALE3)"
-                                    autoComplete="off"
-                                />
-                                <Button type="button" size="icon" onClick={handleSearch} disabled={searching}>
-                                    {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                                </Button>
-                            </div>
-
-                            {showSuggestions && suggestions.length > 0 && (
-                                <div
-                                    ref={suggestionsRef}
-                                    className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg"
-                                >
-                                    <ScrollArea className="max-h-[200px]">
-                                        {suggestions.map((stock) => (
-                                            <button
-                                                key={stock.stock}
-                                                type="button"
-                                                className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-3 transition-colors"
-                                                onClick={() => handleSelectSuggestion(stock)}
-                                            >
-                                                {stock.logo && (
-                                                    <img
-                                                        src={stock.logo}
-                                                        alt={stock.stock}
-                                                        className="w-6 h-6 rounded"
-                                                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                                                    />
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-sm">{stock.stock}</p>
-                                                    <p className="text-xs text-muted-foreground truncate">{stock.name}</p>
-                                                </div>
-                                                <span className="text-sm font-medium text-primary">
-                                                    R$ {stock.close?.toFixed(2) || '0.00'}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </ScrollArea>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Column: Form & Basic Info */}
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="ticker">Código da Ação</Label>
+                            <div className="relative">
+                                <div className="flex gap-2">
+                                    <Input
+                                        ref={inputRef}
+                                        id="ticker"
+                                        value={ticker}
+                                        onChange={(e) => {
+                                            setTicker(e.target.value.toUpperCase());
+                                            setStockData(null);
+                                        }}
+                                        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                                        placeholder="Ex: PETR4"
+                                        autoComplete="off"
+                                    />
+                                    <Button type="button" size="icon" onClick={handleSearch} disabled={searching}>
+                                        {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                    </Button>
                                 </div>
-                            )}
+                                {showSuggestions && suggestions.length > 0 && (
+                                    <div
+                                        ref={suggestionsRef}
+                                        className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg"
+                                    >
+                                        <ScrollArea className="max-h-[200px]">
+                                            {suggestions.map((stock) => (
+                                                <button
+                                                    key={stock.stock}
+                                                    type="button"
+                                                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-3 transition-colors"
+                                                    onClick={() => handleSelectSuggestion(stock)}
+                                                >
+                                                    {stock.logo && (
+                                                        <img
+                                                            src={stock.logo}
+                                                            alt={stock.stock}
+                                                            className="w-6 h-6 rounded"
+                                                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                                                        />
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-medium text-sm">{stock.stock}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">{stock.name}</p>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-primary">
+                                                        R$ {stock.close?.toFixed(2) || '0.00'}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </ScrollArea>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Digite pelo menos 2 caracteres para ver sugestões
-                        </p>
-                    </div>
 
-                    {stockData && (
-                        <div className="space-y-4">
+                        {stockData && (
                             <div className="p-3 bg-muted rounded-lg flex items-center gap-3">
                                 {stockData.logourl && (
                                     <img
@@ -354,12 +356,59 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                     <p className="font-bold">{stockData.symbol}</p>
                                     <p className="text-sm text-muted-foreground truncate max-w-[200px]">{stockData.longName}</p>
                                     <p className="text-sm font-medium text-primary">
-                                        Preço Atual: R$ {stockData.regularMarketPrice?.toFixed(2) || '0.00'}
+                                        R$ {stockData.regularMarketPrice?.toFixed(2) || '0.00'}
                                     </p>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Historical Price Chart */}
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="quantity">Quantidade</Label>
+                                    <Input
+                                        id="quantity"
+                                        type="number"
+                                        step="1"
+                                        value={quantity}
+                                        onChange={(e) => setQuantity(e.target.value)}
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="price">Preço</Label>
+                                    <Input
+                                        id="price"
+                                        type="number"
+                                        step="0.01"
+                                        value={price}
+                                        onChange={(e) => setPrice(e.target.value)}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="date">Data da Compra</Label>
+                                <Input
+                                    id="date"
+                                    type="date"
+                                    value={date}
+                                    onChange={(e) => setDate(e.target.value)}
+                                />
+                            </div>
+
+                            <Button type="submit" className="w-full" disabled={loading || !stockData}>
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Salvar Investimento
+                            </Button>
+                        </form>
+                    </div>
+
+                    {/* Right Column: Chart & AI Analysis */}
+                    <div className="space-y-6">
+                        {/* Historical Price Chart */}
+                        {stockData && (
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-xs text-muted-foreground">Histórico de Preços</Label>
@@ -429,112 +478,99 @@ export const AddInvestmentDialog = ({ open, onOpenChange, onSuccess }: AddInvest
                                         </ResponsiveContainer>
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm p-4 text-center">
-                                            <p>Histórico não disponível para esta ação.</p>
-                                            <p className="text-xs mt-2 opacity-70">
-                                                Verifique se o token da API Brapi está configurado no arquivo .env
-                                            </p>
+                                            <p>Histórico não disponível.</p>
                                         </div>
                                     )}
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* AI Analysis Section */}
-                    {stockData && (
-                        <div className="border rounded-md p-3 bg-muted/30">
-                            <button
-                                type="button"
-                                onClick={() => setIsAnalysisOpen(!isAnalysisOpen)}
-                                className="flex items-center justify-between w-full text-sm font-medium"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Bot className="h-4 w-4 text-primary" />
-                                    Análise IA (Groq)
-                                </div>
-                                {isAnalysisOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-
-                            {isAnalysisOpen && (
-                                <div className="mt-3 text-sm space-y-3 animate-in slide-in-from-top-2">
-                                    {loadingAnalysis ? (
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                            Gerando análise...
-                                        </div>
-                                    ) : aiAnalysis ? (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${aiAnalysis.recommendation === 'buy' ? 'bg-green-500/20 text-green-600' :
-                                                    aiAnalysis.recommendation === 'sell' ? 'bg-red-500/20 text-red-600' :
-                                                        'bg-yellow-500/20 text-yellow-600'
-                                                    }`}>
-                                                    {aiAnalysis.recommendation === 'buy' ? 'Compra' :
-                                                        aiAnalysis.recommendation === 'sell' ? 'Venda' : 'Neutro'}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">
-                                                    Confiança: {aiAnalysis.confidence}%
-                                                </span>
-                                            </div>
-                                            <p className="text-muted-foreground leading-relaxed">
-                                                {aiAnalysis.summary}
-                                            </p>
-                                            <ul className="list-disc list-inside text-xs text-muted-foreground space-y-1">
-                                                {aiAnalysis.keyPoints.map((point, i) => (
-                                                    <li key={i}>{point}</li>
-                                                ))}
-                                            </ul>
-                                        </>
-                                    ) : (
-                                        <p className="text-muted-foreground">Não foi possível gerar a análise.</p>
+                        {/* AI Analysis Section (On-Demand & Horizontal) */}
+                        {stockData && (
+                            <div className="border rounded-md bg-muted/30 overflow-hidden">
+                                <div className="p-3 border-b bg-muted/50 flex items-center justify-between">
+                                    <div className="flex items-center gap-2 font-medium text-sm">
+                                        <Bot className="h-4 w-4 text-purple-600" />
+                                        Análise de Mercado
+                                    </div>
+                                    {!aiAnalysis && !loadingAnalysis && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-7 text-xs"
+                                            onClick={handleAnalyze}
+                                        >
+                                            Gerar Análise
+                                        </Button>
                                     )}
                                 </div>
-                            )}
-                        </div>
-                    )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="quantity">Quantidade</Label>
-                            <Input
-                                id="quantity"
-                                type="number"
-                                step="1"
-                                value={quantity}
-                                onChange={(e) => setQuantity(e.target.value)}
-                                placeholder="0"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="price">Preço de Compra</Label>
-                            <Input
-                                id="price"
-                                type="number"
-                                step="0.01"
-                                value={price}
-                                onChange={(e) => setPrice(e.target.value)}
-                                placeholder="0.00"
-                            />
-                        </div>
+                                <div className="p-4">
+                                    {loadingAnalysis ? (
+                                        <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground">
+                                            <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+                                            <p className="text-xs animate-pulse">Analisando tendências e indicadores...</p>
+                                        </div>
+                                    ) : aiAnalysis ? (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-1">
+                                                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Recomendação</span>
+                                                    <div className={`text-center py-1.5 rounded-md font-bold text-sm border ${aiAnalysis.recommendation === 'buy' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                        aiAnalysis.recommendation === 'sell' ? 'bg-red-100 text-red-700 border-red-200' :
+                                                            'bg-yellow-100 text-yellow-700 border-yellow-200'
+                                                        }`}>
+                                                        {aiAnalysis.recommendation === 'buy' ? 'COMPRA' :
+                                                            aiAnalysis.recommendation === 'sell' ? 'VENDA' : 'NEUTRO'}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Confiança</span>
+                                                    <div className="flex items-center gap-2 h-8">
+                                                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full ${aiAnalysis.confidence >= 70 ? 'bg-green-500' :
+                                                                    aiAnalysis.confidence >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                                                                    }`}
+                                                                style={{ width: `${aiAnalysis.confidence}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs font-bold text-muted-foreground">{aiAnalysis.confidence}%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <span className="text-xs text-muted-foreground font-semibold">Resumo</span>
+                                                <p className="text-xs text-muted-foreground leading-relaxed bg-background/50 p-2 rounded border">
+                                                    {aiAnalysis.summary}
+                                                </p>
+                                            </div>
+
+                                            {aiAnalysis.keyPoints.length > 0 && (
+                                                <div className="space-y-1">
+                                                    <span className="text-xs text-muted-foreground font-semibold">Pontos Chave</span>
+                                                    <ul className="space-y-1">
+                                                        {aiAnalysis.keyPoints.slice(0, 2).map((point, i) => (
+                                                            <li key={i} className="flex gap-2 text-xs text-muted-foreground">
+                                                                <span className="text-purple-500">•</span>
+                                                                {point}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-4 text-xs text-muted-foreground">
+                                            Clique no botão acima para receber uma análise baseada em IA sobre este ativo.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="date">Data da Compra</Label>
-                        <Input
-                            id="date"
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                        />
-                    </div>
-
-                    <DialogFooter>
-                        <Button type="submit" disabled={loading || !stockData}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Salvar Investimento
-                        </Button>
-                    </DialogFooter>
-                </form>
+                </div>
             </DialogContent>
         </Dialog>
     );

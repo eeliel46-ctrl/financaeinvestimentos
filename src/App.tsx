@@ -13,7 +13,7 @@ const queryClient = new QueryClient();
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading } = useExpenses();
 
-  if (loading) {
+  if (loading && !session) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   }
 
