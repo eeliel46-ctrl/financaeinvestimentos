@@ -299,31 +299,47 @@ export const AnalyticsInterface = () => {
   }, []);
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
-      toast.error("Seu navegador não suporta notificações.");
+      toast.error("Este navegador não suporta notificações.");
       return;
     }
 
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
 
-    if (permission === 'granted') {
-      toast.success("Notificações ativadas!");
-      try {
-        new Notification("FinanceBot", {
-          body: "Notificações ativadas com sucesso!",
-          icon: "/icon-192.png"
-        });
-      } catch (e) {
-        // Ignore
-      }
-    } else if (permission === 'denied') {
-      toast.error("Notificações bloqueadas! Clique no cadeado 🔒 na barra de endereço (topo do site) e selecione 'Permitir'.", {
-        duration: 8000,
-        action: {
-          label: "Entendi",
-          onClick: () => console.log("User acknowledge")
+      if (permission === 'granted') {
+        toast.success("Notificações permitidas! 🎉");
+
+        // Tenta enviar uma notificação de teste imediata
+        try {
+          // Em mobile, ServiceWorkerRegistration.showNotification é mais confiável que new Notification()
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            const registration = await navigator.serviceWorker.ready;
+            await registration.showNotification('FinanceBot', {
+              body: 'Notificações ativadas com sucesso!',
+              icon: '/icon-192.png',
+              vibrate: [200, 100, 200]
+            });
+          } else {
+            new Notification("FinanceBot", {
+              body: "Notificações ativadas com sucesso!",
+              icon: "/icon-192.png"
+            });
+          }
+        } catch (e) {
+          console.error("Erro no teste de notificação:", e);
         }
-      });
+      } else if (permission === 'denied') {
+        toast.error("Notificações bloqueadas nas configurações do navegador.", {
+          description: "Clique no cadeado 🔒 na barra de endereço ou vá em Configurações do Site para permitir.",
+          duration: 8000
+        });
+      } else {
+        toast.info("Você precisa permitir as notificações para receber alertas.");
+      }
+    } catch (error) {
+      console.error("Erro ao solicitar permissão:", error);
+      toast.error("Erro ao solicitar permissão.");
     }
   };
 
@@ -1178,11 +1194,26 @@ export const AnalyticsInterface = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={sendTestNotification}
-                  className="flex gap-2"
+                  onClick={() => {
+                    toast.success("Notificações ativas! Enviando teste...");
+                    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+                      navigator.serviceWorker.ready.then(reg => {
+                        reg.showNotification('Teste FinanceBot', {
+                          body: 'Se você está vendo isso, está funcionando!',
+                          icon: '/icon-192.png'
+                        });
+                      });
+                    } else {
+                      new Notification("FinanceBot", {
+                        body: "Teste de notificação!",
+                        icon: "/icon-192.png"
+                      });
+                    }
+                  }}
+                  className="flex gap-2 border-green-200 text-green-700 hover:text-green-800 hover:bg-green-50"
                 >
                   <Bell className="h-4 w-4" />
-                  Testar
+                  Ativas (Testar)
                 </Button>
               ) : notificationPermission === 'denied' ? (
                 <Button
@@ -1196,13 +1227,13 @@ export const AnalyticsInterface = () => {
                 </Button>
               ) : (
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
                   onClick={requestNotificationPermission}
                   className="flex gap-2"
                 >
                   <Bell className="h-4 w-4" />
-                  Ativar
+                  Ativar Notificações
                 </Button>
               )}
             </div>
