@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { BottomNav } from "@/components/BottomNav";
 import { Dashboard } from "@/components/Dashboard";
@@ -9,13 +9,44 @@ import { InvestmentsInterface } from "@/components/InvestmentsInterface";
 import { AnalyticsInterface } from "@/components/AnalyticsInterface";
 import { ExpenseProvider } from "@/contexts/ExpenseContext";
 import { Button } from "@/components/ui/button";
-import { Settings, LogOut, User } from "lucide-react";
+import { Settings, LogOut, User, Menu } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useExpenses } from "@/contexts/ExpenseContext";
+import { toast } from "sonner";
+// @ts-ignore
+import { useRegisterSW } from 'virtual:pwa-register/react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const { signOut } = useExpenses();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // PWA Update Logic
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r: any) {
+      console.log('SW Registered: ' + r);
+    },
+    onRegisterError(error: any) {
+      console.log('SW registration error', error);
+    },
+  });
+
+  useEffect(() => {
+    if (needRefresh) {
+      toast.info("Nova atualização disponível!", {
+        description: "Uma nova versão do app está pronta. Clique para atualizar.",
+        action: {
+          label: "Atualizar Agora",
+          onClick: () => updateServiceWorker(true),
+        },
+        duration: Infinity, // Mantém o toast até o usuário interagir
+      });
+    }
+  }, [needRefresh, updateServiceWorker]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -36,6 +67,8 @@ const Index = () => {
           <div className="p-6">
             <h1 className="text-3xl font-bold mb-4">Configurações</h1>
             <p className="text-muted-foreground">Funcionalidade em desenvolvimento...</p>
+            {/* Debug button for testing update UI */}
+            {/* <Button onClick={() => setNeedRefresh(true)}>Testar Aviso de Atualização</Button> */}
           </div>
         );
       default:
@@ -47,7 +80,26 @@ const Index = () => {
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
       {/* Mobile Header */}
       <div className="md:hidden border-b border-border p-4 flex items-center justify-between bg-card text-card-foreground">
-        <h1 className="font-bold text-lg text-primary">FinanceBot</h1>
+        <div className="flex items-center gap-2">
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-[280px]">
+              <Sidebar
+                activeTab={activeTab}
+                onTabChange={(tab) => {
+                  setActiveTab(tab);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            </SheetContent>
+          </Sheet>
+          <h1 className="font-bold text-lg text-primary">FinanceBot</h1>
+        </div>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
