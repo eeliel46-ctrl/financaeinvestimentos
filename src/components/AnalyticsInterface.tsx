@@ -455,75 +455,33 @@ export const AnalyticsInterface = () => {
   const fetchHistoricalData = async (symbol: string) => {
     setLoadingHistory(true);
     try {
-      const attempts: Array<{ r: '1d' | '2d' | '5d' | '7d' | '1mo' | '3mo' | '6mo' | '1y' | '2y' | '5y' | '10y' | 'ytd' | 'max' | '30d' | '60d'; i?: '15m' | '30m' | '1d' }> = [];
+      let history: HistoricalPrice[] = [];
+
       if (selectedRange === '1d') {
-        attempts.push(
-          { r: '1d', i: '15m' },
-          { r: '1d', i: '30m' },
-          { r: '2d', i: '1d' },
-          { r: '5d', i: '1d' },
-          { r: '7d', i: '1d' },
-          { r: '1mo', i: '1d' },
-          { r: '3mo', i: '1d' },
-          { r: '6mo', i: '1d' },
-          { r: '1y', i: '1d' },
-          { r: '2y', i: '1d' },
-          { r: '5y', i: '1d' },
-          { r: '10y', i: '1d' },
-          { r: 'ytd', i: '1d' },
-          { r: 'max', i: '1d' }
-        );
-      } else if (selectedRange === '30d') {
-        attempts.push(
-          { r: '30d', i: '1d' },
-          { r: '60d', i: '1d' },
-          { r: '1mo', i: '1d' },
-          { r: '3mo', i: '1d' },
-          { r: '6mo', i: '1d' },
-          { r: '1y', i: '1d' },
-          { r: 'ytd', i: '1d' },
-          { r: 'max', i: '1d' },
-          { r: '5d', i: '1d' },
-          { r: '1d', i: '30m' }
-        );
-      } else if (selectedRange === '60d') {
-        attempts.push(
-          { r: '60d', i: '1d' },
-          { r: '30d', i: '1d' },
-          { r: '3mo', i: '1d' },
-          { r: '6mo', i: '1d' },
-          { r: '1y', i: '1d' },
-          { r: 'ytd', i: '1d' },
-          { r: 'max', i: '1d' },
-          { r: '5d', i: '1d' }
-        );
+        // Simplified 1d logic: try 15m, then 5m, then fallback to 5d
+        history = await getStockHistory(symbol, '1d', '15m');
+        if (history.length <= 1) history = await getStockHistory(symbol, '1d', '5m');
+        if (history.length <= 1) history = await getStockHistory(symbol, '5d', '1d');
       } else if (selectedRange === '5d') {
-        attempts.push(
-          { r: '5d', i: '1d' },
-          { r: '7d', i: '1d' },
-          { r: '1mo', i: '1d' },
-          { r: '3mo', i: '1d' },
-          { r: '6mo', i: '1d' },
-          { r: '1y', i: '1d' }
-        );
+        // Simplified 5d logic
+        history = await getStockHistory(symbol, '5d', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '7d', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '1mo', '1d');
+      } else if (selectedRange === '30d') {
+        history = await getStockHistory(symbol, '30d', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '60d', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '1mo', '1d');
+      } else if (selectedRange === '60d') {
+        history = await getStockHistory(symbol, '60d', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '3mo', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '6mo', '1d');
       } else {
-        attempts.push(
-          { r: '1y', i: '1d' },
-          { r: '6mo', i: '1d' },
-          { r: '3mo', i: '1d' },
-          { r: '1mo', i: '1d' },
-          { r: '60d', i: '1d' },
-          { r: '30d', i: '1d' },
-          { r: '5d', i: '1d' },
-          { r: '1d', i: '30m' }
-        );
+        // 1y
+        history = await getStockHistory(symbol, '1y', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '6mo', '1d');
+        if (history.length <= 1) history = await getStockHistory(symbol, '3mo', '1d');
       }
 
-      let history: HistoricalPrice[] = [];
-      for (const a of attempts) {
-        history = await getStockHistory(symbol, a.r, a.i);
-        if (history.length > 1) break;
-      }
 
       setHistoricalData(history);
     } catch (error) {
