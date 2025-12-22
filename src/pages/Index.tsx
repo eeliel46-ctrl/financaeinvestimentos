@@ -6,6 +6,7 @@ import { ChatInterface } from "@/components/ChatInterface";
 import { BudgetsInterface } from "@/components/BudgetsInterface";
 import { GoalsInterface } from "@/components/GoalsInterface";
 import { InvestmentsInterface } from "@/components/InvestmentsInterface";
+import { BankAccountsInterface } from "@/components/BankAccountsInterface";
 import { AnalyticsInterface } from "@/components/AnalyticsInterface";
 import { ExpenseProvider } from "@/contexts/ExpenseContext";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ const Index = () => {
         return <GoalsInterface />;
       case "investments":
         return <InvestmentsInterface />;
+      case "bank-accounts":
+        return <BankAccountsInterface />;
       case "analytics":
         return <AnalyticsInterface />;
       case "settings":

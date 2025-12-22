@@ -10,7 +10,8 @@ import {
   PieChart,
   Target,
   LogOut,
-  Download
+  Download,
+  Wallet
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     { id: "budgets", label: "Orçamentos", icon: PieChart },
     { id: "goals", label: "Metas", icon: Target },
     { id: "investments", label: "Investimentos", icon: TrendingUp },
+    { id: "bank-accounts", label: "Contas Bancárias", icon: Wallet },
     { id: "analytics", label: "Análises", icon: BarChart3 },
     { id: "settings", label: "Configurações", icon: Settings },
   ];

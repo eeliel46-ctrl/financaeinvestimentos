@@ -6,6 +6,7 @@ import {
     Target,
     TrendingUp,
     BarChart3,
+    Wallet,
 } from "lucide-react";
 
 interface BottomNavProps {
@@ -20,6 +21,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
         { id: "budgets", label: "Orçamentos", icon: PieChart },
         { id: "goals", label: "Metas", icon: Target },
         { id: "investments", label: "Investimentos", icon: TrendingUp },
+        { id: "bank-accounts", label: "Bancos", icon: Wallet },
         { id: "analytics", label: "Análises", icon: BarChart3 },
     ];
 
@@ -35,8 +37,8 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                             key={item.id}
                             onClick={() => onTabChange(item.id)}
                             className={`flex flex-col items-center justify-center min-w-[60px] px-2 py-2 rounded-lg transition-all ${isActive
-                                    ? "bg-yellow-500 text-black"
-                                    : "text-zinc-400 hover:text-white"
+                                ? "bg-yellow-500 text-black"
+                                : "text-zinc-400 hover:text-white"
                                 }`}
                         >
                             <Icon className="h-5 w-5 mb-1" />

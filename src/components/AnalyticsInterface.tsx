@@ -410,10 +410,20 @@ export const AnalyticsInterface = () => {
 
               if (triggered) {
                 if (Notification.permission === 'granted') {
-                  new Notification(`Alerta de ${alert.alert_type === 'buy' ? 'Compra' : 'Venda'}: ${ticker}`, {
-                    body: `O preço atingiu R$ ${currentPrice.toFixed(2)}. Alvo: R$ ${alert.target_price.toFixed(2)}`,
-                    icon: data.logourl
-                  });
+                  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(registration => {
+                      registration.showNotification(`Alerta de ${alert.alert_type === 'buy' ? 'Compra' : 'Venda'}: ${ticker}`, {
+                        body: `O preço atingiu R$ ${currentPrice.toFixed(2)}. Alvo: R$ ${alert.target_price.toFixed(2)}`,
+                        icon: data.logourl || '/icon-192.png',
+                        vibrate: [200, 100, 200]
+                      });
+                    });
+                  } else {
+                    new Notification(`Alerta de ${alert.alert_type === 'buy' ? 'Compra' : 'Venda'}: ${ticker}`, {
+                      body: `O preço atingiu R$ ${currentPrice.toFixed(2)}. Alvo: R$ ${alert.target_price.toFixed(2)}`,
+                      icon: data.logourl || '/icon-192.png'
+                    });
+                  }
                 }
               }
             }
